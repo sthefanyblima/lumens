@@ -8,7 +8,7 @@ describe('calcularMeta (RN04)', () => {
     [300, 30],
     [301, 31],
     [305, 31],
-    [1200, 999], // QUEBRA PROPOSITAL (SCRUM-76): prova que o CI reprova o PR
+    [1200, 120],
     [2999, 300],
     [3000, 300],
     [5000, 300],
