@@ -9,13 +9,18 @@
   },
   "scripts": {
     "dev": "tsx --env-file-if-exists=../../.env src/main.ts",
-    "env:check": "tsx --env-file-if-exists=../../.env src/main.ts",
+    "env:check": "tsx --env-file-if-exists=../../.env src/main.ts --so-validar",
+    "sim": "tsx --env-file-if-exists=../../.env scripts/sim.ts",
+    "fixtures": "tsx scripts/gerar-fixtures.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@lumens/db": "workspace:*",
     "@lumens/dominio": "workspace:*",
+    "fastify": "^5.12.7",
+    "pg-boss": "^12.38.0",
+    "pino": "^10.4.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {

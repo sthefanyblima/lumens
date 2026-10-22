@@ -76,11 +76,12 @@ cp .env.example .env   # só na primeira vez
 pnpm db:up
 ```
 
-| Comando         | O que faz                                                |
-| --------------- | -------------------------------------------------------- |
-| `pnpm db:up`    | Sobe o PostgreSQL e só retorna quando ele aceita conexão |
-| `pnpm db:down`  | Derruba o container, preservando os dados                |
-| `pnpm db:reset` | Apaga o volume e sobe do zero (recria o `lumens_test`)   |
+| Comando           | O que faz                                                |
+| ----------------- | -------------------------------------------------------- |
+| `pnpm db:up`      | Sobe o PostgreSQL e só retorna quando ele aceita conexão |
+| `pnpm db:down`    | Derruba o container, preservando os dados                |
+| `pnpm db:reset`   | Apaga o volume e sobe do zero (recria o `lumens_test`)   |
+| `pnpm db:migrate` | Aplica as migrações de `packages/db/migracoes/`          |
 
 Conferir que o banco respondeu:
 
@@ -111,10 +112,43 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 Para conferir se o seu `.env` está completo:
 
 ```bash
-pnpm --filter @lumens/backend dev
+pnpm --filter @lumens/backend env:check
 ```
 
 Ele lista de uma vez todas as variáveis que faltam, ou confirma que o ambiente está válido.
+
+### Esquema e migrações
+
+O esquema fica em `packages/db/src/schema.ts` (Drizzle). Depois de mudar o esquema, gere a
+migração e aplique:
+
+```bash
+pnpm --filter @lumens/db generate   # cria o SQL em packages/db/migracoes/
+pnpm db:migrate
+```
+
+Nunca edite à mão um SQL que já foi aplicado: gere uma migração nova.
+
+## Bot (parte 2)
+
+```bash
+pnpm db:up && pnpm db:migrate   # banco com as tabelas do bot
+pnpm dev                        # servidor em :3001 (PORT do .env)
+pnpm sim texto 'buraco no bloco 12'
+```
+
+O `pnpm dev` valida o ambiente e sobe o Fastify com o webhook da Meta (`GET`/`POST /webhook`)
+e a fila (pg-boss, que cria o próprio schema `pgboss` no banco). O simulador assina com o
+`META_APP_SECRET` do `.env`, então dá para testar o fluxo inteiro sem celular nem conta Meta:
+veja [apps/backend/SIMULADOR.md](apps/backend/SIMULADOR.md).
+
+Pendências da parte 2:
+
+- Worker do job `incoming-message`: deve chamar `handleIncoming` (`src/bot/conversation/router.ts`)
+  com os bytes da `CHAVE_HMAC` e responder pela API da Meta.
+- Handlers das histórias 2.4, 2.5 e 2.6 são placeholders (`TODO` em
+  `src/bot/conversation/handlers.ts`).
+- Verificar o webhook no painel da Meta e medir resposta < 5 s (critério de pronto da 2.1).
 
 ## Como contribuir
 
