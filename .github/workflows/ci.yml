@@ -57,6 +57,7 @@ jobs:
           cache: pnpm
 
       - name: Instalar dependências
+        id: install
         run: pnpm install --frozen-lockfile
 
       - name: Checar tipos
@@ -65,18 +66,18 @@ jobs:
       # !cancelled() em vez do padrão: sem isso o primeiro portão vermelho esconde
       # os seguintes, e o lint quebrado só aparece no push depois do typecheck passar.
       - name: Lint
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         run: pnpm lint
 
       - name: Formatação
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         run: pnpm format:check
 
       # Service container não monta docker/init/, então o banco de teste é criado aqui.
       # Enquanto a T4 não unificar, esta linha e docker/init/ precisam concordar —
       # na T4, executar o próprio .sql aqui (psql -f) para ter uma fonte só.
       - name: Criar o banco de teste
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         env:
           DATABASE_URL: postgresql://lumens:lumens_ci@localhost:5432/lumens
         run: psql "$DATABASE_URL" -c 'CREATE DATABASE lumens_test'
@@ -86,7 +87,7 @@ jobs:
       # job faria o step seguinte ignorar o .env justamente nelas — e ele viraria
       # um no-op silencioso.
       - name: Testes
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         env:
           DATABASE_URL: postgresql://lumens:lumens_ci@localhost:5432/lumens
           DATABASE_URL_LEITURA: postgresql://lumens:lumens_ci@localhost:5432/lumens
@@ -101,7 +102,7 @@ jobs:
       # O .env tem de ficar na raiz do repositório: é o caminho que o script resolve, e
       # validar outro caminho não validaria nada. O step seguinte apaga o arquivo.
       - name: Validar o carregamento do .env
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         timeout-minutes: 2
         run: |
           cp .env.example .env
