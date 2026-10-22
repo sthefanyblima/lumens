@@ -1,0 +1,14 @@
+{
+  "name": "@lumens/db",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Esquema, migrações, views e seed do PostgreSQL (parte 1).",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  }
+}

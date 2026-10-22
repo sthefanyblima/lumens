@@ -1,0 +1,14 @@
+{
+  "name": "@lumens/dominio",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Regras de negócio do Lumens (parte 1). Única porta de escrita nas tabelas de negócio.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  }
+}

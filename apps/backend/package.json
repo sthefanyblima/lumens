@@ -1,0 +1,18 @@
+{
+  "name": "@lumens/backend",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Back-end Node.js: bot (webhook da Meta), agendador e API.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@lumens/db": "workspace:*",
+    "@lumens/dominio": "workspace:*"
+  }
+}
