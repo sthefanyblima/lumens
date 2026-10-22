@@ -1,0 +1,95 @@
+name: CI
+
+# PR cobre o que entra; push na main cobre o merge commit, que não é idêntico a
+# nenhum dos pais — dois PRs verdes que se cruzam podem quebrar a main.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Push novo numa branch cancela a execução anterior: o feedback que importa é o do
+# último commit.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# O workflow só precisa ler o código.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # Equivalente ao docker-compose.yml do ambiente local. A partir da T4 é aqui que
+    # os testes de integração (migrações, trigger da T5, views da T14) vão rodar.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: lumens
+          POSTGRES_PASSWORD: lumens_ci
+          POSTGRES_DB: lumens
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U lumens -d lumens"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      DATABASE_URL: postgresql://lumens:lumens_ci@localhost:5432/lumens
+      DATABASE_URL_LEITURA: postgresql://lumens:lumens_ci@localhost:5432/lumens
+      DATABASE_URL_TESTE: postgresql://lumens:lumens_ci@localhost:5432/lumens_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Precisa vir ANTES do setup-node: o cache do pnpm não encontra o gerenciador
+      # se a ordem for invertida. A versão sai do campo packageManager do package.json.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      # Service container não monta docker/init/, então o banco de teste é criado aqui.
+      # Enquanto a T4 não unificar, esta linha e docker/init/ precisam concordar.
+      - name: Criar o banco de teste
+        run: psql "$DATABASE_URL" -c 'CREATE DATABASE lumens_test'
+
+      - name: Checar tipos
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Formatação
+        run: pnpm format:check
+
+      - name: Testes
+        run: pnpm test
+
+      # Nenhum teste unitário pega o carregamento do .env: carregarEnv() recebe a fonte
+      # por parâmetro, então apagar o --env-file do script `dev` deixaria os testes verdes
+      # e o comando do README mentindo. Este passo exercita o caminho de verdade.
+      - name: Validar o carregamento do .env
+        run: |
+          cp .env.example .env
+          node -e "
+            const fs = require('fs');
+            const crypto = require('crypto');
+            const chave = () => crypto.randomBytes(32).toString('base64');
+            let env = fs.readFileSync('.env', 'utf8');
+            env = env.replace('cole-aqui-32-bytes-em-base64', chave());
+            env = env.replace('cole-aqui-OUTROS-32-bytes-em-base64', chave());
+            fs.writeFileSync('.env', env);
+          "
+          pnpm --filter @lumens/backend dev
