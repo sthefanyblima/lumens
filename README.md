@@ -24,6 +24,7 @@ lumens/
 │   │   ├── src/agendador/  rotinas por data                 (parte 3)
 │   │   └── src/api/        leitura pública e curadoria      (partes 1 e 5)
 │   └── site/             Next.js: site público e painel     (partes 4 e 5)
+├── docker/init/          scripts SQL do banco local         (parte 1)
 └── packages/
     ├── db/               esquema, migrações, views, seed    (parte 1)
     └── dominio/          regras de negócio + testes         (parte 1)
@@ -45,6 +46,11 @@ pnpm install
 pnpm check        # typecheck + lint + formatação + testes
 ```
 
+> **Windows:** o `corepack enable` escreve em `C:Program Files
+odejs` e falha com `EPERM`
+> num terminal comum. Rode-o uma vez num **PowerShell como Administrador**; depois disso
+> o `pnpm` funciona normalmente no terminal de sempre.
+
 Comandos úteis:
 
 | Comando          | O que faz                               |
@@ -58,7 +64,56 @@ Comandos úteis:
 
 Para rodar um comando em um pacote só: `pnpm --filter @lumens/dominio test`.
 
-Banco local (T2), CI (T3) e documentação completa (T21) entram nas próximas tasks.
+CI (T3) e documentação completa (T21) entram nas próximas tasks.
+
+## Banco local
+
+Pré-requisito: **Docker Desktop** aberto e rodando.
+
+```bash
+cp .env.example .env   # só na primeira vez
+pnpm db:up
+```
+
+| Comando         | O que faz                                                |
+| --------------- | -------------------------------------------------------- |
+| `pnpm db:up`    | Sobe o PostgreSQL e só retorna quando ele aceita conexão |
+| `pnpm db:down`  | Derruba o container, preservando os dados                |
+| `pnpm db:reset` | Apaga o volume e sobe do zero (recria o `lumens_test`)   |
+
+Conferir que o banco respondeu:
+
+```bash
+docker compose exec postgres psql -U lumens -d lumens -c 'select 1'
+```
+
+São dois bancos no mesmo container: `lumens`, para desenvolvimento, e `lumens_test`, para os
+testes de integração — criado pelos scripts de `docker/init/`, que rodam uma única vez, na
+criação do volume. Se editar algum deles, use `pnpm db:reset`.
+
+A versão do PostgreSQL é fixada no `docker-compose.yml` e precisa acompanhar a do banco de
+homologação, que será definida na T20.
+
+### Variáveis de ambiente
+
+Todas as variáveis estão documentadas no `.env.example`, uma a uma. O `.env` é ignorado pelo git
+e nunca deve ser commitado; em produção os segredos vivem no cofre da hospedagem e no CI.
+
+`CHAVE_CIFRA` e `CHAVE_HMAC` são **duas chaves diferentes**: uma cifra telefone e e-mail, a
+outra gera o HMAC que permite buscar por telefone sem decifrar a base inteira. Gere cada uma
+com:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+Para conferir se o seu `.env` está completo:
+
+```bash
+pnpm --filter @lumens/backend dev
+```
+
+Ele lista de uma vez todas as variáveis que faltam, ou confirma que o ambiente está válido.
 
 ## Como contribuir
 

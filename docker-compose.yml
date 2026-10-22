@@ -1,0 +1,31 @@
+# Banco local do Lumens (SCRUM-75).
+# Sobe com `pnpm db:up`, derruba com `pnpm db:down`, recria do zero com `pnpm db:reset`.
+#
+# A versão major tem de acompanhar a do banco de homologação na AWS, que ainda será
+# definida na T20 (SCRUM-93). Até lá, 17.
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: lumens-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?defina POSTGRES_USER no .env (copie o .env.example)}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: ${POSTGRES_DB:-lumens}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - lumens-pgdata:/var/lib/postgresql/data
+      # Scripts de init rodam uma única vez, quando o volume é criado.
+      - ./docker/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # `pnpm db:up` usa --wait e só retorna quando este healthcheck passar.
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  lumens-pgdata:
