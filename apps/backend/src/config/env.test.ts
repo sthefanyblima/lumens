@@ -24,6 +24,15 @@ function ambienteCompleto(): FonteDeAmbiente {
   };
 }
 
+function mensagemDeErro(fonte: FonteDeAmbiente): string {
+  try {
+    carregarEnv(fonte);
+  } catch (erro) {
+    return erro instanceof Error ? erro.message : String(erro);
+  }
+  throw new Error('esperava que carregarEnv lançasse, mas ela retornou');
+}
+
 describe('carregarEnv', () => {
   it('aceita um ambiente completo e converte a porta para número', () => {
     const env = carregarEnv(ambienteCompleto());
@@ -32,21 +41,27 @@ describe('carregarEnv', () => {
     expect(env.DATABASE_URL).toBe('postgresql://lumens:senha@localhost:5432/lumens');
   });
 
+  it('usa process.env quando nenhuma fonte é passada — o caminho que o main.ts percorre', () => {
+    const original = process.env;
+    try {
+      process.env = ambienteCompleto();
+      expect(carregarEnv().EMAIL_PORT).toBe(587);
+    } finally {
+      process.env = original;
+    }
+  });
+
   it('nomeia a variável que está faltando', () => {
     const { DATABASE_URL: _removida, ...semBanco } = ambienteCompleto();
 
-    expect(() => carregarEnv(semBanco)).toThrow(/DATABASE_URL/);
+    // Com dois-pontos para não casar por prefixo com DATABASE_URL_LEITURA.
+    expect(mensagemDeErro(semBanco)).toContain('DATABASE_URL:');
   });
 
   it('lista todas as variáveis faltantes de uma vez, não só a primeira', () => {
     const { META_TOKEN: _a, EMAIL_HOST: _b, AWS_REGION: _c, ...incompleto } = ambienteCompleto();
 
-    let mensagem = '';
-    try {
-      carregarEnv(incompleto);
-    } catch (erro) {
-      mensagem = erro instanceof Error ? erro.message : String(erro);
-    }
+    const mensagem = mensagemDeErro(incompleto);
 
     expect(mensagem).toContain('META_TOKEN');
     expect(mensagem).toContain('EMAIL_HOST');
@@ -54,27 +69,63 @@ describe('carregarEnv', () => {
   });
 
   it('recusa variável presente mas vazia', () => {
-    expect(() => carregarEnv({ ...ambienteCompleto(), META_APP_SECRET: '' })).toThrow(
-      /META_APP_SECRET/,
+    expect(mensagemDeErro({ ...ambienteCompleto(), META_APP_SECRET: '' })).toContain(
+      'META_APP_SECRET',
     );
+  });
+
+  it('recusa EMAIL_PORT que não é número', () => {
+    expect(mensagemDeErro({ ...ambienteCompleto(), EMAIL_PORT: 'quinhentos' })).toContain(
+      'EMAIL_PORT',
+    );
+  });
+
+  it('recusa EMAIL_PORT zero ou negativa', () => {
+    expect(mensagemDeErro({ ...ambienteCompleto(), EMAIL_PORT: '0' })).toContain('EMAIL_PORT');
   });
 
   it('recusa chave de cifra que não tem 32 bytes', () => {
-    expect(() =>
-      carregarEnv({ ...ambienteCompleto(), CHAVE_CIFRA: Buffer.alloc(16, 9).toString('base64') }),
-    ).toThrow(/CHAVE_CIFRA/);
+    const curta = Buffer.alloc(16, 9).toString('base64');
+
+    expect(mensagemDeErro({ ...ambienteCompleto(), CHAVE_CIFRA: curta })).toContain('CHAVE_CIFRA');
+  });
+
+  it('recusa chave com lixo fora do alfabeto base64, mesmo que decodifique para 32 bytes', () => {
+    // O Node descarta os caracteres inválidos em silêncio: este valor decodifica
+    // para 32 bytes, mas não é o base64 que o dev colou no CI.
+    const comLixo = `!!!${CHAVE_A}`;
+    expect(Buffer.from(comLixo, 'base64')).toHaveLength(32);
+
+    expect(mensagemDeErro({ ...ambienteCompleto(), CHAVE_CIFRA: comLixo })).toContain('base64');
+  });
+
+  it('recusa chave com quebra de linha colada junto', () => {
+    const comQuebra = `${CHAVE_A}\n`;
+
+    expect(mensagemDeErro({ ...ambienteCompleto(), CHAVE_HMAC: comQuebra })).toContain('base64');
   });
 
   it('recusa CHAVE_HMAC igual à CHAVE_CIFRA', () => {
-    expect(() => carregarEnv({ ...ambienteCompleto(), CHAVE_HMAC: CHAVE_A })).toThrow(
-      /CHAVE_HMAC.*DIFERENTE/s,
-    );
+    expect(mensagemDeErro({ ...ambienteCompleto(), CHAVE_HMAC: CHAVE_A })).toContain('DIFERENTE');
   });
 
-  it('aceita as variáveis opcionais ausentes', () => {
-    const env = carregarEnv(ambienteCompleto());
+  it('trata opcional ausente e opcional vazia da mesma forma', () => {
+    const semChave = carregarEnv(ambienteCompleto());
+    const chaveVazia = carregarEnv({
+      ...ambienteCompleto(),
+      S3_ENDPOINT: '',
+      DATABASE_URL_TESTE: '',
+    });
 
-    expect(env.S3_ENDPOINT).toBeUndefined();
-    expect(env.DATABASE_URL_TESTE).toBeUndefined();
+    expect(semChave.S3_ENDPOINT).toBeUndefined();
+    // Depois de `cp .env.example .env` a chave existe e está vazia: tem de virar undefined.
+    expect(chaveVazia.S3_ENDPOINT).toBeUndefined();
+    expect(chaveVazia.DATABASE_URL_TESTE).toBeUndefined();
+  });
+
+  it('preserva opcional preenchida', () => {
+    const env = carregarEnv({ ...ambienteCompleto(), S3_ENDPOINT: 'http://localhost:9000' });
+
+    expect(env.S3_ENDPOINT).toBe('http://localhost:9000');
   });
 });

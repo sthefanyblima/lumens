@@ -46,8 +46,7 @@ pnpm install
 pnpm check        # typecheck + lint + formatação + testes
 ```
 
-> **Windows:** o `corepack enable` escreve em `C:Program Files
-odejs` e falha com `EPERM`
+> **Windows:** o `corepack enable` escreve em `C:\Program Files\nodejs` e falha com `EPERM`
 > num terminal comum. Rode-o uma vez num **PowerShell como Administrador**; depois disso
 > o `pnpm` funciona normalmente no terminal de sempre.
 

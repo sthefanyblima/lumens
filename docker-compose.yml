@@ -14,14 +14,19 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
       POSTGRES_DB: ${POSTGRES_DB:-lumens}
     ports:
-      - '${POSTGRES_PORT:-5432}:5432'
+      # Bind explícito em localhost: sem isso o Docker publica em 0.0.0.0 e o banco
+      # fica alcançável por qualquer máquina da rede, com a senha que está no repositório.
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     volumes:
       - lumens-pgdata:/var/lib/postgresql/data
       # Scripts de init rodam uma única vez, quando o volume é criado.
       - ./docker/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       # `pnpm db:up` usa --wait e só retorna quando este healthcheck passar.
-      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      # -h 127.0.0.1 força TCP. Sem ele o pg_isready usa o socket Unix, que já responde
+      # enquanto o servidor temporário da inicialização roda os scripts de docker/init/;
+      # o --wait retornaria antes de o lumens_test existir.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
       interval: 5s
       timeout: 5s
       retries: 12

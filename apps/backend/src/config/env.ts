@@ -13,20 +13,41 @@ const obrigatoria = z
   .min(1, 'definida, porém vazia');
 
 /**
+ * Opcional de verdade: a chave pode estar ausente OU presente e vazia.
+ * Depois de `cp .env.example .env` ela está presente e vazia, que é o caso comum.
+ */
+const opcional = z
+  .string()
+  .optional()
+  .transform((valor) => (valor === undefined || valor === '' ? undefined : valor));
+
+/**
  * Chave de 32 bytes em base64 — o tamanho que o AES-256-GCM exige
  * (Roteiro da Parte 1, seção 6).
+ *
+ * O round-trip vem antes do teste de tamanho de propósito: o decodificador base64
+ * do Node não reclama de entrada inválida, ele descarta em silêncio o que não
+ * entende e decodifica o resto. Conferir só o tamanho deixaria passar uma chave
+ * com espaço, quebra de linha ou em base64url — que decodifica para 32 bytes
+ * DIFERENTES dos do CI. O sintoma seria dado cifrado numa máquina que não abre
+ * na outra, com a validação jurando que está tudo certo.
  */
-const chaveDe32Bytes = obrigatoria.refine(
-  (valor) => Buffer.from(valor, 'base64').length === 32,
-  "precisa ser uma chave de 32 bytes em base64 — gere com: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"",
-);
+const chaveDe32Bytes = obrigatoria
+  .refine(
+    (valor) => Buffer.from(valor, 'base64').toString('base64') === valor,
+    'não é base64 válido — confira se não entrou espaço, quebra de linha ou caractere trocado ao copiar',
+  )
+  .refine(
+    (valor) => Buffer.from(valor, 'base64').length === 32,
+    "precisa ter 32 bytes — gere com: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"",
+  );
 
 const esquema = z
   .object({
     // Banco
     DATABASE_URL: obrigatoria,
     DATABASE_URL_LEITURA: obrigatoria,
-    DATABASE_URL_TESTE: z.string().optional(),
+    DATABASE_URL_TESTE: opcional,
 
     // Criptografia (T17)
     CHAVE_CIFRA: chaveDe32Bytes,
@@ -51,7 +72,7 @@ const esquema = z
     // AWS / fotos (T20)
     AWS_REGION: obrigatoria,
     S3_BUCKET_FOTOS: obrigatoria,
-    S3_ENDPOINT: z.string().optional(),
+    S3_ENDPOINT: opcional,
   })
   .refine((env) => env.CHAVE_CIFRA !== env.CHAVE_HMAC, {
     message:
@@ -66,6 +87,9 @@ export type FonteDeAmbiente = Record<string, string | undefined>;
 /**
  * Lê e valida o ambiente. Recebe a fonte por parâmetro para que os testes não
  * precisem mexer no `process.env` do processo que está rodando.
+ *
+ * Quem popula o `process.env` a partir do `.env` é o `--env-file-if-exists` do
+ * Node, no script `dev` — esta função não lê arquivo nenhum.
  *
  * @throws {Error} listando TODAS as variáveis com problema, não só a primeira.
  */
