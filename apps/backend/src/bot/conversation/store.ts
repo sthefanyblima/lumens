@@ -27,6 +27,11 @@ export class ConversationStore {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
+  /** O mesmo store, com o mesmo relógio, gravando por outra conexão (ex.: uma transação). */
+  withDb(db: Db): ConversationStore {
+    return new ConversationStore(db, this.now);
+  }
+
   /** Estado atual; expirado (expiresAt <= agora) é tratado como ausente. */
   async get(phoneHmac: string): Promise<ConversationState | null> {
     const rows = await this.db

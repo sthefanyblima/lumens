@@ -1,7 +1,7 @@
 import type { Db } from '@lumens/db';
 import type { FastifyPluginCallback } from 'fastify';
 import type { Chaves } from '../../cripto';
-import type { Logger } from '../../logger';
+import { resumoDoErro, type Logger } from '../../logger';
 import type { JobQueue } from '../../queue';
 import { verifySignature } from '../whatsapp/signature';
 import { processWebhookPayload, type ProcessResult } from './process';
@@ -77,7 +77,8 @@ export const webhookPlugin: FastifyPluginCallback<WebhookPluginOptions> = (app, 
     try {
       result = await processWebhookPayload(payload, opts);
     } catch (err) {
-      logger.error({ err }, 'falha ao processar webhook');
+      // Nunca `{ err }`: o erro de query traz o job (com o texto da pessoa) nos parâmetros.
+      logger.error({ erro: resumoDoErro(err) }, 'falha ao processar webhook');
       return reply.code(500).send();
     }
     logger.debug(result, 'webhook processado');

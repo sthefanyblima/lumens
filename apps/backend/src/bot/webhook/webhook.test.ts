@@ -1,44 +1,23 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { processedMessages, sql, type Db, type Tx } from '@lumens/db';
+import { processedMessages, type Db } from '@lumens/db';
 import { criarBancoEmMemoria } from '@lumens/db/teste';
 import type { FastifyInstance } from 'fastify';
 import { pino } from 'pino';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app';
 import { decifrar, type Chaves } from '../../cripto';
-import { JOBS, type JobQueue } from '../../queue';
+import { FakeQueue, mensagensNaFila, prepararFilaFalsa } from '../../queue.fake';
 import { hashPhone } from '../conversation/phone';
 import { FIXTURES_DIR } from '../sim/fixtures';
 import { signBody } from '../whatsapp/signature';
-import { DEDUP_TTL_MS, deleteOldDedup, type IncomingMessageJob } from './process';
+import { DEDUP_TTL_MS, deleteOldDedup } from './process';
 
 const config = { verifyToken: 'verify-SECRET-123', appSecret: 'segredo-app' };
 const chaves: Chaves = { cifra: Buffer.alloc(32, 1), hmac: Buffer.alloc(32, 2) };
 const PHONE = '5582988887777';
 
-/**
- * Fila falsa que grava na MESMA transação do dedup, numa tabela do próprio PGlite — como o
- * pg-boss com `fromDrizzle` faz em produção. Assim o rollback vale para o job também, e o
- * jsonb recusa o que o Postgres recusaria.
- */
-class FakeQueue implements JobQueue {
-  fail = false;
-  async send(name: string, data: object, tx: Tx) {
-    await tx.execute(
-      sql`insert into fake_job (name, data) values (${name}, ${JSON.stringify(data)}::jsonb)`,
-    );
-    // Falha DEPOIS do insert: prova que a transação desfaz o job e o dedup juntos.
-    if (this.fail) throw new Error('fila fora do ar');
-    return 'job';
-  }
-}
-
-async function jobs(db: Db): Promise<{ name: string; data: IncomingMessageJob }[]> {
-  const resultado = await db.execute(sql`select name, data from fake_job order by id`);
-  // O Db é genérico no driver, então o `execute` volta `unknown`; no PGlite é `{ rows }`.
-  return (resultado as { rows: { name: string; data: IncomingMessageJob }[] }).rows;
-}
+const jobs = mensagensNaFila;
 
 function mensagem(wamid: string, body = 'oi') {
   return { id: wamid, from: PHONE, timestamp: '1700000000', type: 'text', text: { body } };
@@ -81,9 +60,7 @@ describe('webhook da Meta', () => {
   // PGlite leva alguns segundos para subir no primeiro teste.
   beforeEach(async () => {
     db = await criarBancoEmMemoria();
-    await db.execute(
-      sql`create table fake_job (id serial primary key, name text not null, data jsonb not null)`,
-    );
+    await prepararFilaFalsa(db);
     queue = new FakeQueue();
     logs = [];
     const logger = pino({ level: 'debug' }, { write: (linha: string) => logs.push(linha) });
@@ -148,7 +125,6 @@ describe('webhook da Meta', () => {
     expect(res.statusCode).toBe(200);
     const [job, ...resto] = await jobs(db);
     expect(resto).toHaveLength(0);
-    expect(job?.name).toBe(JOBS.incomingMessage);
     expect(job?.data).toMatchObject({
       phoneHmac: hashPhone(PHONE, chaves.hmac),
       phoneNumberId: 'PNID',
@@ -209,13 +185,13 @@ describe('webhook da Meta', () => {
   });
 
   it('falha na fila → 500, nem dedup nem job ficam, e o retry enfileira', async () => {
-    queue.fail = true;
+    queue.failSend = true;
     const res = await post(textPayload('wamid.RETRY'));
     expect(res.statusCode).toBe(500);
     expect(await dedup()).toHaveLength(0);
     expect(await jobs(db)).toHaveLength(0);
 
-    queue.fail = false;
+    queue.failSend = false;
     const retry = await post(textPayload('wamid.RETRY'));
     expect(retry.statusCode).toBe(200);
     expect(await jobs(db)).toHaveLength(1);
@@ -268,6 +244,51 @@ describe('webhook da Meta', () => {
     expect(res.statusCode).toBe(200);
     const [job] = await jobs(db);
     expect(job?.data.content.text?.body).toBe('ab � fim');
+  });
+
+  it.each([
+    ['type', { type: 'text\u0000' }],
+    ['timestamp', { timestamp: '1700\ud83d' }],
+    ['image.id', { type: 'image', image: { id: 'i\u0000', mime_type: 'image/jpeg', sha256: 's' } }],
+    [
+      'interactive.type',
+      {
+        type: 'interactive',
+        interactive: { type: 'b\u0000', button_reply: { id: '1', title: 't' } },
+      },
+    ],
+  ])('\\u0000 ou surrogate solto em %s também é limpo, não vira 500', async (_, campos) => {
+    const res = await post(payloadCom({ metadata, messages: [{ ...mensagem('w.X'), ...campos }] }));
+    expect(res.statusCode).toBe(200);
+    expect(await jobs(db)).toHaveLength(1);
+  });
+
+  it('\\u0000 no phone_number_id também é limpo', async () => {
+    const res = await post(
+      payloadCom({ metadata: { phone_number_id: 'PN\u0000ID' }, messages: [mensagem('w.PN')] }),
+    );
+    expect(res.statusCode).toBe(200);
+    const [job] = await jobs(db);
+    expect(job?.data.phoneNumberId).toBe('PNID');
+  });
+
+  it('um campo sujo no meio do lote não derruba as mensagens seguintes', async () => {
+    const lote = payloadCom({
+      metadata,
+      messages: [mensagem('w.A'), { ...mensagem('w.B'), type: 'text\u0000' }, mensagem('w.C')],
+    });
+    expect((await post(lote)).statusCode).toBe(200);
+    expect(await jobs(db)).toHaveLength(3);
+  });
+
+  it('falha de banco no enqueue: 500, e o log não traz o texto da mensagem', async () => {
+    queue.failSendInQuery = true;
+    const res = await post(textPayload('wamid.LOG', 'texto secreto da pessoa'));
+    expect(res.statusCode).toBe(500);
+
+    const erro = logs.find((linha) => linha.includes('falha ao processar webhook'));
+    expect(erro).toContain('"codigo":"22P02"');
+    expect(logs.join('\n')).not.toContain('texto secreto da pessoa');
   });
 
   it('o job leva só o conteúdo conhecido, sem o telefone do context.from', async () => {

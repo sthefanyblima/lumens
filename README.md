@@ -146,13 +146,18 @@ O job de cada mensagem não leva telefone nem wamid em claro (o wamid da Meta co
 telefone): vão como HMAC da `CHAVE_HMAC`, para achar a conversa, e cifrados com a `CHAVE_CIFRA`,
 para o worker responder.
 
+Um worker consome a fila `incoming-message` e anda a conversa. O novo estado, as respostas (na
+fila `outgoing-replies`) e a conclusão do job entram na mesma transação: se o processo cair no
+meio, a mensagem é reentregue em até 1 minuto e aplicada uma vez só. Enquanto o envio pela Meta
+não existe, as respostas aparecem no log do `pnpm dev` como `respostas do bot`.
+
 Em produção não há `.env` nem devDependencies: o ambiente vem da hospedagem e o servidor sobe
 com `pnpm --filter @lumens/backend start` (migrações: `pnpm db:migrate`).
 
 Pendências da parte 2:
 
-- Worker do job `incoming-message`: deve chamar `handleIncoming` (`src/bot/conversation/router.ts`)
-  com os bytes da `CHAVE_HMAC` e responder pela API da Meta.
+- Envio das respostas pela API da Meta: trocar o `logSender` (`src/bot/worker.ts`) por um sender
+  que decifra o telefone e chama a Cloud API.
 - Handlers das histórias 2.4, 2.5 e 2.6 são placeholders (`TODO` em
   `src/bot/conversation/handlers.ts`).
 - Verificar o webhook no painel da Meta e medir resposta < 5 s (critério de pronto da 2.1).

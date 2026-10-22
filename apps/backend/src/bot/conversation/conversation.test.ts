@@ -18,7 +18,7 @@ let db: Db;
 let clock: Date;
 let store: ConversationStore;
 const now = () => clock;
-const send = (text: string) => handleIncoming({ phone: PHONE, text }, { store, phoneKey: CHAVE });
+const send = (text: string) => handleIncoming({ phoneHmac: H, text }, { store });
 const advance = (ms: number) => {
   clock = new Date(clock.getTime() + ms);
 };
@@ -65,9 +65,9 @@ describe('steps', () => {
       ...defaultHandlers,
       GREETING: () => ({ next: 'NEW_ASK_PHOTO' as const, replies: [] }),
     };
-    await expect(
-      handleIncoming({ phone: PHONE, text: 'oi' }, { store, phoneKey: CHAVE, handlers }),
-    ).rejects.toThrow(InvalidTransitionError);
+    await expect(handleIncoming({ phoneHmac: H, text: 'oi' }, { store, handlers })).rejects.toThrow(
+      InvalidTransitionError,
+    );
     expect(await store.get(H)).toBeNull();
   });
 });
@@ -135,7 +135,7 @@ describe('router', () => {
       ...defaultHandlers,
       MENU: () => ({ next: 'MENU' as const, data: { remover: undefined, nova: 3 }, replies: [] }),
     };
-    await handleIncoming({ phone: PHONE, text: 'x' }, { store, phoneKey: CHAVE, handlers });
+    await handleIncoming({ phoneHmac: H, text: 'x' }, { store, handlers });
     expect((await store.get(H))?.data).toEqual({ manter: 1, nova: 3 });
   });
 

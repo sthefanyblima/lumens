@@ -1,12 +1,13 @@
-import { criarDb, criarPool, sql } from '@lumens/db';
+import { criarDb, criarPool, sql, type Tx } from '@lumens/db';
 import { fromDrizzle, PgBoss } from 'pg-boss';
 import { registerCleanupJob } from './agendador/limpeza-conversas';
 import { buildApp } from './app';
 import { ConversationStore } from './bot/conversation/store';
+import { logSender, registerIncomingWorker, registerReplyWorker } from './bot/worker';
 import { carregarEnv, type Env } from './config/env';
 import { chavesDoEnv } from './cripto';
-import { criarLogger } from './logger';
-import { JOBS, type JobQueue } from './queue';
+import { criarLogger, resumoDoErro } from './logger';
+import type { JobQueue } from './queue';
 
 /**
  * Entrada executável do back-end (`pnpm --filter @lumens/backend dev`).
@@ -33,31 +34,36 @@ async function iniciar(env: Env): Promise<void> {
   const logger = criarLogger(env.LOG_LEVEL);
 
   try {
-    const pool = criarPool(env.DATABASE_URL, (err) => {
+    const pool = criarPool(env.DATABASE_URL, (erro) => {
       // Conexão ociosa derrubada pelo Postgres: o pool descarta e abre outra na próxima query.
-      logger.error({ err }, 'conexão do banco caiu');
+      logger.error({ erro: resumoDoErro(erro) }, 'conexão do banco caiu');
     });
     const db = criarDb(pool);
 
-    // O pg-boss cria o próprio schema (`pgboss`) no primeiro start.
-    const boss = new PgBoss(env.DATABASE_URL);
-    boss.on('error', (err) => {
-      logger.error({ err }, 'pg-boss error');
+    // O pg-boss cria o próprio schema (`pgboss`) no primeiro start. O LISTEN/NOTIFY acorda os
+    // workers das filas com `notify` assim que o job é criado.
+    const boss = new PgBoss({ connectionString: env.DATABASE_URL, useListenNotify: true });
+    boss.on('error', (erro) => {
+      logger.error({ erro: resumoDoErro(erro) }, 'pg-boss error');
     });
     await boss.start();
-    // pg-boss v10+ exige que a fila exista antes do send.
-    for (const name of Object.values(JOBS)) {
-      if (!(await boss.getQueue(name))) await boss.createQueue(name);
-    }
+
+    // O Tx é genérico no driver (PGlite nos testes), então o tipo do `execute` não sabe que
+    // devolve `{ rows }`. Aqui o driver é sempre o node-postgres, que devolve.
+    const naTransacao = (tx: Tx) => ({
+      db: fromDrizzle(tx as unknown as Parameters<typeof fromDrizzle>[0], sql),
+    });
     const queue: JobQueue = {
-      // O Tx é genérico no driver (PGlite nos testes), então o tipo do `execute` não sabe que
-      // devolve `{ rows }`. Aqui o driver é sempre o node-postgres, que devolve.
-      send: (name, data, tx) =>
-        boss.send(name, data, {
-          db: fromDrizzle(tx as unknown as Parameters<typeof fromDrizzle>[0], sql),
-        }),
+      send: (name, data, tx) => boss.send(name, data, naTransacao(tx)),
+      complete: async (name, id, tx) => {
+        await boss.complete(name, id, null, naTransacao(tx));
+      },
     };
-    await registerCleanupJob(boss, { store: new ConversationStore(db), db });
+    const store = new ConversationStore(db);
+    // As filas são criadas aqui, antes do servidor aceitar o primeiro webhook.
+    await registerCleanupJob(boss, { store, db });
+    await registerIncomingWorker(boss, { db, store, queue });
+    await registerReplyWorker(boss, logSender(logger));
 
     const app = await buildApp({
       config: { verifyToken: env.META_VERIFY_TOKEN, appSecret: env.META_APP_SECRET },
@@ -79,7 +85,7 @@ async function iniciar(env: Env): Promise<void> {
         await pool.end();
         process.exit(0);
       } catch (err) {
-        logger.error({ err }, 'erro no encerramento');
+        logger.error({ erro: resumoDoErro(err) }, 'erro no encerramento');
         process.exit(1);
       }
     };
@@ -90,7 +96,7 @@ async function iniciar(env: Env): Promise<void> {
       void shutdown('SIGTERM');
     });
   } catch (err) {
-    logger.fatal({ err }, 'falha ao iniciar');
+    logger.fatal({ erro: resumoDoErro(err) }, 'falha ao iniciar');
     process.exit(1);
   }
 }

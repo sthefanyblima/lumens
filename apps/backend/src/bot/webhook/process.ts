@@ -33,7 +33,9 @@ function paraJsonb(texto: string): string {
     .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '�');
 }
 
+// Todo campo de texto que vai para a fila passa por aqui — não só o corpo da mensagem.
 const texto = z.string().transform(paraJsonb);
+const textoNaoVazio = z.string().min(1).transform(paraJsonb);
 
 /**
  * O que vai para a fila, além dos identificadores. O `z.object` descarta campo desconhecido,
@@ -43,15 +45,15 @@ const conteudoSchema = z.object({
   text: z.object({ body: texto }).optional(),
   image: z
     .object({
-      id: z.string(),
-      mime_type: z.string(),
-      sha256: z.string(),
+      id: texto,
+      mime_type: texto,
+      sha256: texto,
       caption: texto.optional(),
     })
     .optional(),
   interactive: z
     .object({
-      type: z.string(),
+      type: texto,
       button_reply: z.object({ id: texto, title: texto }).optional(),
       list_reply: z.object({ id: texto, title: texto, description: texto.optional() }).optional(),
     })
@@ -63,17 +65,18 @@ const conteudoSchema = z.object({
 });
 
 const mensagemSchema = conteudoSchema.extend({
+  // id e from não vão crus para a fila (viram HMAC e cifra), então não passam pelo paraJsonb.
   id: z.string().min(1),
   from: z.string().min(1),
-  timestamp: z.string(),
-  type: z.string().min(1),
+  timestamp: texto,
+  type: textoNaoVazio,
 });
 
 const envelopeSchema = z.object({ entry: z.array(z.unknown()) });
 const entradaSchema = z.object({ changes: z.array(z.unknown()) });
 const mudancaSchema = z.object({
   value: z.object({
-    metadata: z.object({ phone_number_id: z.string().min(1) }),
+    metadata: z.object({ phone_number_id: textoNaoVazio }),
     messages: z.array(z.unknown()).optional(),
     statuses: z.array(z.unknown()).optional(),
   }),

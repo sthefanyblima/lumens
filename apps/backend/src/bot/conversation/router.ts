@@ -1,12 +1,9 @@
 import { defaultHandlers, MENU_TEXT, normalize, type HandlerRegistry } from './handlers';
-import { hashPhone } from './phone';
 import { assertTransition, type Step } from './steps';
 import type { ConversationData, ConversationStore } from './store';
 
 export interface RouterDeps {
   store: ConversationStore;
-  /** Bytes da CHAVE_HMAC, para o HMAC do telefone. */
-  phoneKey: Buffer;
   handlers?: HandlerRegistry;
 }
 
@@ -19,14 +16,17 @@ export function parseGlobalCommand(text: string): GlobalCommand | null {
   return t === 'menu' || t === 'cancelar' ? t : null;
 }
 
-/** Processa uma mensagem de texto e devolve as respostas a enviar. */
+/**
+ * Processa uma mensagem de texto e devolve as respostas a enviar. A conversa é achada pelo
+ * `phoneHmac` (o `hashPhone` do remetente), que o webhook já calcula e põe no job.
+ */
 export async function handleIncoming(
-  msg: { phone: string; text: string },
+  msg: { phoneHmac: string; text: string },
   deps: RouterDeps,
 ): Promise<string[]> {
   const { store } = deps;
   const handlers = deps.handlers ?? defaultHandlers;
-  const phoneHmac = hashPhone(msg.phone, deps.phoneKey);
+  const { phoneHmac } = msg;
   const current = await store.get(phoneHmac);
 
   const cmd = parseGlobalCommand(msg.text);
