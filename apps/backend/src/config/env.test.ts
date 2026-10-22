@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { carregarEnv, type FonteDeAmbiente } from './env';
 
 const CHAVE_A = Buffer.alloc(32, 1).toString('base64');
@@ -42,12 +42,15 @@ describe('carregarEnv', () => {
   });
 
   it('usa process.env quando nenhuma fonte é passada — o caminho que o main.ts percorre', () => {
-    const original = process.env;
+    // stubEnv mexe só nas chaves: trocar o objeto process.env inteiro apagaria
+    // PATH e companhia para o worker, e viraria flake se os testes rodarem em paralelo.
+    for (const [chave, valor] of Object.entries(ambienteCompleto())) {
+      vi.stubEnv(chave, valor ?? '');
+    }
     try {
-      process.env = ambienteCompleto();
       expect(carregarEnv().EMAIL_PORT).toBe(587);
     } finally {
-      process.env = original;
+      vi.unstubAllEnvs();
     }
   });
 
@@ -96,13 +99,17 @@ describe('carregarEnv', () => {
     const comLixo = `!!!${CHAVE_A}`;
     expect(Buffer.from(comLixo, 'base64')).toHaveLength(32);
 
-    expect(mensagemDeErro({ ...ambienteCompleto(), CHAVE_CIFRA: comLixo })).toContain('base64');
+    expect(mensagemDeErro({ ...ambienteCompleto(), CHAVE_CIFRA: comLixo })).toContain(
+      'não é base64 válido',
+    );
   });
 
   it('recusa chave com quebra de linha colada junto', () => {
     const comQuebra = `${CHAVE_A}\n`;
 
-    expect(mensagemDeErro({ ...ambienteCompleto(), CHAVE_HMAC: comQuebra })).toContain('base64');
+    expect(mensagemDeErro({ ...ambienteCompleto(), CHAVE_HMAC: comQuebra })).toContain(
+      'não é base64 válido',
+    );
   });
 
   it('recusa CHAVE_HMAC igual à CHAVE_CIFRA', () => {
