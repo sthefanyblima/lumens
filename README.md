@@ -114,6 +114,20 @@ pnpm --filter @lumens/backend dev
 
 Ele lista de uma vez todas as variáveis que faltam, ou confirma que o ambiente está válido.
 
+## Site
+
+```bash
+pnpm --filter @lumens/site dev     # http://localhost:3000
+pnpm --filter @lumens/site build   # build de produção
+```
+
+Homologação: **https://lumens-five.vercel.app**. Até o ambiente da AWS (1.1b), o site é
+publicado na Vercel manualmente, a partir da `main` atualizada:
+
+```bash
+pnpm dlx vercel --prod
+```
+
 ## Como contribuir
 
 - **Nunca** faça commit direto na `main`: toda mudança entra por pull request revisado.

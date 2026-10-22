@@ -1,4 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src"]
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "plugins": [{ "name": "next" }]
+  },
+  "include": ["next-env.d.ts", "next.config.ts", "src", ".next/types/**/*.ts"]
 }
