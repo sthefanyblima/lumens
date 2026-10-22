@@ -11,10 +11,10 @@ import {
   buildStatus,
   buildTextMessage,
 } from '../src/bot/sim/payloads';
-import { sendSigned, signPayload } from '../src/bot/sim/send';
+import { sendSigned, signPayload, urlPadrao } from '../src/bot/sim/send';
 import type { MetaWebhookPayload } from '../src/bot/whatsapp/types';
 
-const URL_PADRAO = `http://localhost:${process.env.PORT ?? '3001'}/webhook`;
+const URL_PADRAO = urlPadrao(process.env.PORT);
 
 const USAGE = `Uso: pnpm --filter @lumens/backend sim <tipo> [args...] [opções]
 

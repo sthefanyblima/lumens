@@ -208,12 +208,15 @@ describe('limpeza agendada das conversas', () => {
     };
     await store.save('old', 'MENU', {});
     advance(25 * HOUR);
-    await registerCleanupJob(boss as unknown as Parameters<typeof registerCleanupJob>[0], store);
+    await registerCleanupJob(boss as unknown as Parameters<typeof registerCleanupJob>[0], {
+      store,
+      db,
+    });
     expect(calls).toEqual([
       ['createQueue', JOBS.cleanupConversations],
       ['schedule', JOBS.cleanupConversations, CLEANUP_CRON, null, { tz: CLEANUP_TZ }],
     ]);
     if (!worker) throw new Error('registerCleanupJob não registrou o worker');
-    expect(await worker()).toEqual({ deleted: 1 });
+    expect(await worker()).toEqual({ deleted: 1, dedupDeleted: 0 });
   });
 });

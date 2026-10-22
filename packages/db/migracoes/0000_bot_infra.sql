@@ -8,6 +8,6 @@ CREATE TABLE "conversation_state" (
 );
 --> statement-breakpoint
 CREATE TABLE "processed_message" (
-	"wamid" text PRIMARY KEY NOT NULL,
+	"wamid_hmac" text PRIMARY KEY NOT NULL,
 	"received_at" timestamp with time zone DEFAULT now() NOT NULL
 );

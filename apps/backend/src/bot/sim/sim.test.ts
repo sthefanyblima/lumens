@@ -14,7 +14,7 @@ import {
   buildStatus,
   buildTextMessage,
 } from './payloads';
-import { sendSigned, signPayload } from './send';
+import { sendSigned, signPayload, urlPadrao } from './send';
 
 function value(p: MetaWebhookPayload) {
   const v = p.entry[0]?.changes[0]?.value;
@@ -90,6 +90,16 @@ describe('construtores de payload', () => {
     expect(v.statuses).toHaveLength(1);
     expect(v.statuses?.[0]).toMatchObject({ id: 'wamid.S', status: 'read', recipient_id: '5582' });
     expect(v.statuses?.[0]?.timestamp).toMatch(/^\d+$/);
+  });
+});
+
+describe('destino padrão do simulador', () => {
+  it.each([
+    [undefined, 'http://localhost:3001/webhook'],
+    ['', 'http://localhost:3001/webhook'],
+    ['8080', 'http://localhost:8080/webhook'],
+  ])('PORT=%j → %s', (porta, url) => {
+    expect(urlPadrao(porta)).toBe(url);
   });
 });
 

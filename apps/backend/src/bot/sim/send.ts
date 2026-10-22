@@ -8,6 +8,14 @@ export interface SignedRequest {
   signature: string;
 }
 
+/**
+ * Destino padrão do simulador: o webhook local na PORT do .env. PORT vazia vale 3001, como no
+ * servidor — depois de `cp .env.example .env` ela pode estar presente e vazia.
+ */
+export function urlPadrao(porta: string | undefined): string {
+  return `http://localhost:${porta === undefined || porta === '' ? '3001' : porta}/webhook`;
+}
+
 /** Serializa o payload e calcula a assinatura sobre os mesmos bytes. */
 export function signPayload(payload: unknown, secret: string): SignedRequest {
   const body = JSON.stringify(payload);

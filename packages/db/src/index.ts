@@ -7,10 +7,10 @@
 export const PACOTE_DB = '@lumens/db' as const;
 
 export * from './schema';
-export { criarDb, type Db } from './cliente';
+export { criarDb, criarPool, type Db, type Tx } from './cliente';
 export { migrar, PASTA_MIGRACOES } from './migrar';
 
 // Operadores do Drizzle reexportados daqui para que os outros pacotes não dependam do
 // drizzle-orm direto: com o pnpm, duas instâncias dele (resolvidas com peers diferentes)
-// não reconhecem as tabelas uma da outra.
-export { and, eq, gt, lt } from 'drizzle-orm';
+// não reconhecem as tabelas uma da outra. O `sql` é o que o fromDrizzle do pg-boss pede.
+export { and, eq, gt, lt, sql } from 'drizzle-orm';

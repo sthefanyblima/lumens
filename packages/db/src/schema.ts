@@ -8,9 +8,13 @@ import { jsonb, pgEnum, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
  * entram na T4 (SCRUM-77).
  */
 
-/** Dedup de mensagens da Meta: a Meta reenvia o mesmo wamid, e ele só pode ser processado uma vez. */
+/**
+ * Dedup de mensagens da Meta: a Meta reenvia o mesmo wamid, e ele só pode ser processado uma vez.
+ * Guarda o HMAC do wamid, não o wamid: o wamid da Meta é base64 de uma estrutura que contém o
+ * telefone do remetente. A limpeza diária apaga as linhas mais velhas que a janela de reenvio.
+ */
 export const processedMessages = pgTable('processed_message', {
-  wamid: text('wamid').primaryKey(),
+  wamidHmac: text('wamid_hmac').primaryKey(),
   receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

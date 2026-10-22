@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { hmacHex } from '../../cripto';
 
 /**
  * HMAC-SHA256 (hex) do telefone. Nunca guardamos o número puro.
@@ -7,5 +7,5 @@ import { createHmac } from 'node:crypto';
  * chave que a busca por telefone da T17 vai usar, e as duas precisam gerar o mesmo hash.
  */
 export function hashPhone(phone: string, chave: Buffer): string {
-  return createHmac('sha256', chave).update(phone).digest('hex');
+  return hmacHex(phone, chave);
 }

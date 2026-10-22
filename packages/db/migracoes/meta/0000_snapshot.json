@@ -1,5 +1,5 @@
 {
-  "id": "4a27b5d2-838a-470a-81ff-0cc3be8dd8f5",
+  "id": "9106830b-08e6-4ead-8fc4-68bc75f81e32",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -54,8 +54,8 @@
       "name": "processed_message",
       "schema": "",
       "columns": {
-        "wamid": {
-          "name": "wamid",
+        "wamid_hmac": {
+          "name": "wamid_hmac",
           "type": "text",
           "primaryKey": true,
           "notNull": true

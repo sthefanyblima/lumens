@@ -1,9 +1,10 @@
-import { criarDb } from '@lumens/db';
-import { PgBoss } from 'pg-boss';
+import { criarDb, criarPool, sql } from '@lumens/db';
+import { fromDrizzle, PgBoss } from 'pg-boss';
 import { registerCleanupJob } from './agendador/limpeza-conversas';
 import { buildApp } from './app';
 import { ConversationStore } from './bot/conversation/store';
 import { carregarEnv, type Env } from './config/env';
+import { chavesDoEnv } from './cripto';
 import { criarLogger } from './logger';
 import { JOBS, type JobQueue } from './queue';
 
@@ -32,7 +33,11 @@ async function iniciar(env: Env): Promise<void> {
   const logger = criarLogger(env.LOG_LEVEL);
 
   try {
-    const db = criarDb(env.DATABASE_URL);
+    const pool = criarPool(env.DATABASE_URL, (err) => {
+      // Conexão ociosa derrubada pelo Postgres: o pool descarta e abre outra na próxima query.
+      logger.error({ err }, 'conexão do banco caiu');
+    });
+    const db = criarDb(pool);
 
     // O pg-boss cria o próprio schema (`pgboss`) no primeiro start.
     const boss = new PgBoss(env.DATABASE_URL);
@@ -44,14 +49,22 @@ async function iniciar(env: Env): Promise<void> {
     for (const name of Object.values(JOBS)) {
       if (!(await boss.getQueue(name))) await boss.createQueue(name);
     }
-    const queue: JobQueue = { send: (name, data) => boss.send(name, data) };
-    await registerCleanupJob(boss, new ConversationStore(db));
+    const queue: JobQueue = {
+      // O Tx é genérico no driver (PGlite nos testes), então o tipo do `execute` não sabe que
+      // devolve `{ rows }`. Aqui o driver é sempre o node-postgres, que devolve.
+      send: (name, data, tx) =>
+        boss.send(name, data, {
+          db: fromDrizzle(tx as unknown as Parameters<typeof fromDrizzle>[0], sql),
+        }),
+    };
+    await registerCleanupJob(boss, { store: new ConversationStore(db), db });
 
     const app = await buildApp({
       config: { verifyToken: env.META_VERIFY_TOKEN, appSecret: env.META_APP_SECRET },
       db,
       queue,
       logger,
+      chaves: chavesDoEnv(env),
     });
     await app.listen({ port: env.PORT, host: '0.0.0.0' });
 
@@ -63,6 +76,7 @@ async function iniciar(env: Env): Promise<void> {
       try {
         await app.close();
         await boss.stop({ graceful: true });
+        await pool.end();
         process.exit(0);
       } catch (err) {
         logger.error({ err }, 'erro no encerramento');

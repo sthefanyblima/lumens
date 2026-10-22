@@ -35,15 +35,3 @@ export interface MetaStatus {
   timestamp: string;
   recipient_id: string;
 }
-
-/**
- * Confere só o mínimo para percorrer o payload (`entry` é lista). O resto do formato é
- * responsabilidade da Meta: o corpo já passou pela assinatura antes de chegar aqui.
- */
-export function isWebhookPayload(valor: unknown): valor is MetaWebhookPayload {
-  return (
-    typeof valor === 'object' &&
-    valor !== null &&
-    Array.isArray((valor as { entry?: unknown }).entry)
-  );
-}

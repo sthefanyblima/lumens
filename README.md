@@ -139,8 +139,15 @@ pnpm sim texto 'buraco no bloco 12'
 
 O `pnpm dev` valida o ambiente e sobe o Fastify com o webhook da Meta (`GET`/`POST /webhook`)
 e a fila (pg-boss, que cria o próprio schema `pgboss` no banco). O simulador assina com o
-`META_APP_SECRET` do `.env`, então dá para testar o fluxo inteiro sem celular nem conta Meta:
-veja [apps/backend/SIMULADOR.md](apps/backend/SIMULADOR.md).
+`META_APP_SECRET` do `.env`, então dá para testar o webhook (assinatura, dedup e fila) sem celular
+nem conta Meta: veja [apps/backend/SIMULADOR.md](apps/backend/SIMULADOR.md).
+
+O job de cada mensagem não leva telefone nem wamid em claro (o wamid da Meta codifica o
+telefone): vão como HMAC da `CHAVE_HMAC`, para achar a conversa, e cifrados com a `CHAVE_CIFRA`,
+para o worker responder.
+
+Em produção não há `.env` nem devDependencies: o ambiente vem da hospedagem e o servidor sobe
+com `pnpm --filter @lumens/backend start` (migrações: `pnpm db:migrate`).
 
 Pendências da parte 2:
 

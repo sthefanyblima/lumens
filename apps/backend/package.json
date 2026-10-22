@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "tsx --env-file-if-exists=../../.env src/main.ts",
     "env:check": "tsx --env-file-if-exists=../../.env src/main.ts --so-validar",
+    "start": "tsx src/main.ts",
     "sim": "tsx --env-file-if-exists=../../.env scripts/sim.ts",
     "fixtures": "tsx scripts/gerar-fixtures.ts",
     "typecheck": "tsc -p tsconfig.json",
@@ -21,9 +22,7 @@
     "fastify": "^5.12.7",
     "pg-boss": "^12.38.0",
     "pino": "^10.4.0",
+    "tsx": "^4.23.15",
     "zod": "^4.6.7"
-  },
-  "devDependencies": {
-    "tsx": "^4.23.15"
   }
 }
