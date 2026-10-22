@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "tsx --env-file-if-exists=../../.env src/main.ts",
+    "env:check": "tsx --env-file-if-exists=../../.env src/main.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests"
   },
