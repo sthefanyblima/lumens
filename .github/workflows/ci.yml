@@ -1,0 +1,128 @@
+name: CI
+
+# PR cobre o que entra; push na main cobre o merge commit, que não é idêntico a
+# nenhum dos pais — dois PRs verdes que se cruzam podem quebrar a main.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # Só cancela em PR: num push na main, cancelar deixaria um commit sem veredito,
+  # e descobrir qual merge quebrou a main é justamente o motivo desse gatilho.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# O workflow só precisa ler o código.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # ATENÇÃO: este nome é o contexto exigido pelo ruleset `protecao-main`
+    # (Settings → Rules → Rulesets → Required status checks → `check`).
+    # Renomear aqui sem atualizar lá trava o merge para sempre, esperando um
+    # check que nunca mais vai rodar.
+    name: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # Equivalente ao docker-compose.yml do ambiente local. A partir da T4 é aqui que
+    # os testes de integração (migrações, trigger da T5, views da T14) vão rodar.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: lumens
+          POSTGRES_PASSWORD: lumens_ci
+          POSTGRES_DB: lumens
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U lumens -d lumens"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Precisa vir ANTES do setup-node: o cache do pnpm não encontra o gerenciador
+      # se a ordem for invertida. A versão sai do campo packageManager do package.json.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Instalar dependências
+        id: install
+        run: pnpm install --frozen-lockfile
+
+      - name: Checar tipos
+        run: pnpm typecheck
+
+      # !cancelled() em vez do padrão: sem isso o primeiro portão vermelho esconde
+      # os seguintes, e o lint quebrado só aparece no push depois do typecheck passar.
+      - name: Lint
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
+        run: pnpm lint
+
+      - name: Formatação
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
+        run: pnpm format:check
+
+      # Service container não monta docker/init/, então o banco de teste é criado aqui.
+      # Enquanto a T4 não unificar, esta linha e docker/init/ precisam concordar —
+      # na T4, executar o próprio .sql aqui (psql -f) para ter uma fonte só.
+      - name: Criar o banco de teste
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
+        env:
+          DATABASE_URL: postgresql://lumens:lumens_ci@localhost:5432/lumens
+        run: psql "$DATABASE_URL" -c 'CREATE DATABASE lumens_test'
+
+      # As variáveis de banco ficam NESTE step, não no nível do job: o Node dá
+      # precedência ao ambiente do processo sobre o --env-file, então defini-las no
+      # job faria o step seguinte ignorar o .env justamente nelas — e ele viraria
+      # um no-op silencioso.
+      - name: Testes
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
+        env:
+          DATABASE_URL: postgresql://lumens:lumens_ci@localhost:5432/lumens
+          DATABASE_URL_LEITURA: postgresql://lumens:lumens_ci@localhost:5432/lumens
+          DATABASE_URL_TESTE: postgresql://lumens:lumens_ci@localhost:5432/lumens_test
+        run: pnpm test
+
+      # Nenhum teste unitário pega o carregamento do .env: carregarEnv() recebe a fonte
+      # por parâmetro, então apagar o --env-file do script deixaria os testes verdes e o
+      # comando documentado no README mentindo. Este step exercita o caminho de verdade,
+      # com o ambiente LIMPO — nenhuma variável do job pode mascarar o arquivo.
+      #
+      # O .env tem de ficar na raiz do repositório: é o caminho que o script resolve, e
+      # validar outro caminho não validaria nada. O step seguinte apaga o arquivo.
+      - name: Validar o carregamento do .env
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
+        timeout-minutes: 2
+        run: |
+          cp .env.example .env
+          node -e "
+            const fs = require('fs');
+            const crypto = require('crypto');
+            const marcadores = ['cole-aqui-32-bytes-em-base64', 'cole-aqui-OUTROS-32-bytes-em-base64'];
+            let env = fs.readFileSync('.env', 'utf8');
+            for (const marcador of marcadores) {
+              if (!env.includes(marcador)) {
+                throw new Error('O marcador ' + marcador + ' sumiu do .env.example — atualize este passo do ci.yml.');
+              }
+              env = env.replace(marcador, crypto.randomBytes(32).toString('base64'));
+            }
+            fs.writeFileSync('.env', env);
+          "
+          pnpm --filter @lumens/backend env:check
+
+      # Sempre, inclusive se algo acima falhar: um .env esquecido no workspace vira
+      # ambiente fantasma para os steps que a T4 vai acrescentar depois daqui.
+      - name: Remover o .env do workspace
+        if: ${{ always() }}
+        run: rm -f .env

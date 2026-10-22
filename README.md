@@ -1,5 +1,7 @@
 # Lumens
 
+[![CI](https://github.com/sthefanyblima/lumens/actions/workflows/ci.yml/badge.svg)](https://github.com/sthefanyblima/lumens/actions/workflows/ci.yml)
+
 Sistema de pautas estudantis da UFAL: **da reclamação à pauta**. São dois canais sobre um banco só:
 um **bot de WhatsApp**, onde o estudante relata, apoia e cobra, e um **site público**, onde qualquer
 pessoa acompanha as pautas, as conquistas e a atividade.
