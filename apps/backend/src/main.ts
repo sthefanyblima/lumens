@@ -7,7 +7,15 @@ import { logSender, registerIncomingWorker, registerReplyWorker } from './bot/wo
 import { carregarEnv, type Env } from './config/env';
 import { chavesDoEnv } from './cripto';
 import { criarLogger, resumoDoErro } from './logger';
-import type { JobQueue } from './queue';
+import { StaleJobError, type JobQueue } from './queue';
+
+/**
+ * Sem limite, um banco travado deixaria a transação de uma mensagem pendurada além dos 60 s do
+ * `expireInSeconds`: o job expira e é pego de novo enquanto a primeira tentativa ainda roda.
+ * Com estes limites a tentativa falha antes disso (e o `complete` amarrado à tentativa cobre o
+ * resto).
+ */
+const POOL_TIMEOUTS = { conexaoMs: 5_000, consultaMs: 15_000 } as const;
 
 /**
  * Entrada executável do back-end (`pnpm --filter @lumens/backend dev`).
@@ -34,7 +42,7 @@ async function iniciar(env: Env): Promise<void> {
   const logger = criarLogger(env.LOG_LEVEL);
 
   try {
-    const pool = criarPool(env.DATABASE_URL, (erro) => {
+    const pool = criarPool(env.DATABASE_URL, POOL_TIMEOUTS, (erro) => {
       // Conexão ociosa derrubada pelo Postgres: o pool descarta e abre outra na próxima query.
       logger.error({ erro: resumoDoErro(erro) }, 'conexão do banco caiu');
     });
@@ -42,7 +50,11 @@ async function iniciar(env: Env): Promise<void> {
 
     // O pg-boss cria o próprio schema (`pgboss`) no primeiro start. O LISTEN/NOTIFY acorda os
     // workers das filas com `notify` assim que o job é criado.
-    const boss = new PgBoss({ connectionString: env.DATABASE_URL, useListenNotify: true });
+    const boss = new PgBoss({
+      connectionString: env.DATABASE_URL,
+      useListenNotify: true,
+      connectionTimeoutMillis: POOL_TIMEOUTS.conexaoMs,
+    });
     boss.on('error', (erro) => {
       logger.error({ erro: resumoDoErro(erro) }, 'pg-boss error');
     });
@@ -54,27 +66,29 @@ async function iniciar(env: Env): Promise<void> {
       db: fromDrizzle(tx as unknown as Parameters<typeof fromDrizzle>[0], sql),
     });
     const queue: JobQueue = {
-      send: (name, data, tx, options) =>
-        boss.send(name, data, {
-          ...naTransacao(tx),
-          ...(options?.group ? { group: { id: options.group } } : {}),
-        }),
-      complete: async (name, id, tx) => {
-        await boss.complete(name, id, null, naTransacao(tx));
+      send: (name, data, tx) => boss.send(name, data, naTransacao(tx)),
+      complete: async (name, job, tx) => {
+        // O tipo declara CommandResponse vazio, mas o pg-boss devolve `{ jobs, requested, affected }`
+        // (mapCommandResponse); com a tentativa no argumento, `affected` é 0 se ela não vale mais.
+        const resposta = (await boss.complete(name, job, null, naTransacao(tx))) as {
+          affected?: number;
+        };
+        if (resposta.affected !== 1) throw new StaleJobError();
       },
     };
+    const chaves = chavesDoEnv(env);
     const store = new ConversationStore(db);
     // As filas são criadas aqui, antes do servidor aceitar o primeiro webhook.
     await registerCleanupJob(boss, { store, db });
-    await registerIncomingWorker(boss, { db, store, queue, logger });
-    await registerReplyWorker(boss, logSender(logger), logger);
+    await registerIncomingWorker(boss, { db, store, queue, logger, chaves });
+    await registerReplyWorker(boss, logSender(logger, chaves), logger);
 
     const app = await buildApp({
       config: { verifyToken: env.META_VERIFY_TOKEN, appSecret: env.META_APP_SECRET },
       db,
       queue,
       logger,
-      chaves: chavesDoEnv(env),
+      chaves,
     });
     await app.listen({ port: env.PORT, host: '0.0.0.0' });
 

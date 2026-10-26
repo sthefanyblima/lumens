@@ -1,6 +1,6 @@
 import { lt, mensagensProcessadas, type Db } from '@lumens/db';
 import { z } from 'zod';
-import { cifrar, hmacHex, type Chaves } from '../../cripto';
+import { cifrar, decifrar, hmacHex, type Chaves } from '../../cripto';
 import type { Logger } from '../../logger';
 import { JOBS, type JobQueue } from '../../queue';
 import { hashPhone } from '../conversation/phone';
@@ -16,6 +16,8 @@ export interface ProcessResult {
   enqueued: number;
   duplicates: number;
   statusesIgnored: number;
+  /** Mensagens que não são da pessoa falando com o bot (reação, aviso do sistema). */
+  messagesIgnored: number;
   /** Partes fora do formato esperado: ignoradas com 200, porque reenviar não as conserta. */
   invalid: number;
 }
@@ -83,14 +85,22 @@ const mudancaSchema = z.object({
 });
 const statusSchema = z.object({ status: z.string() });
 
+/**
+ * Tipos de mensagem que não pedem resposta: reação (👍 numa mensagem do bot) e aviso do sistema
+ * (ex.: a pessoa trocou de número). Responder "só entendo texto" a eles seria ruído.
+ */
+const TIPOS_IGNORADOS = new Set(['reaction', 'system', 'ephemeral']);
+
 export type ConteudoMensagem = z.infer<typeof conteudoSchema>;
 
 /**
  * Dados do job JOBS.incomingMessage consumidos pelo worker da conversa.
  *
- * Nada que identifique a pessoa vai em claro para a fila (RNF01): o pg-boss guarda o job por
- * até 14 dias. Telefone e wamid — o wamid da Meta codifica o telefone — vão como HMAC (para
- * achar a conversa e deduplicar) e cifrados (para o worker responder).
+ * Nada que a pessoa escreveu ou que a identifique vai em claro para a fila (RNF01): o pg-boss
+ * guarda o job por até 14 dias, e a fila de mortas também. Telefone e wamid — o wamid da Meta
+ * codifica o telefone — vão como HMAC (para achar a conversa e deduplicar) e cifrados (para o
+ * worker responder). O conteúdo (texto, legenda, botão) vai cifrado: texto livre pode ter
+ * e-mail, nome ou telefone.
  */
 export interface IncomingMessageJob {
   wamidHmac: string;
@@ -101,7 +111,12 @@ export interface IncomingMessageJob {
   phoneNumberId: string;
   type: string;
   timestamp: string;
-  content: ConteudoMensagem;
+  /** `ConteudoMensagem` em JSON, cifrado com a CHAVE_CIFRA. Leia com `conteudoDoJob`. */
+  contentCifrado: string;
+}
+
+export function conteudoDoJob(job: IncomingMessageJob, chaves: Chaves): ConteudoMensagem {
+  return conteudoSchema.parse(JSON.parse(decifrar(job.contentCifrado, chaves.cifra)));
 }
 
 /**
@@ -118,7 +133,13 @@ export async function processWebhookPayload(
   payload: unknown,
   deps: ProcessDeps,
 ): Promise<ProcessResult> {
-  const result: ProcessResult = { enqueued: 0, duplicates: 0, statusesIgnored: 0, invalid: 0 };
+  const result: ProcessResult = {
+    enqueued: 0,
+    duplicates: 0,
+    statusesIgnored: 0,
+    messagesIgnored: 0,
+    invalid: 0,
+  };
   const invalida = (parte: string, erro: z.ZodError) => {
     // Só o caminho dos campos, nunca os valores: o payload tem telefone e texto da pessoa.
     const campos = erro.issues.map((problema) => problema.path.join('.'));
@@ -162,6 +183,11 @@ export async function processWebhookPayload(
           invalida('message', mensagem.error);
           continue;
         }
+        if (TIPOS_IGNORADOS.has(mensagem.data.type)) {
+          deps.logger.info({ type: mensagem.data.type }, 'mensagem sem resposta (ignorada)');
+          result.messagesIgnored++;
+          continue;
+        }
         const nova = await enfileirar(mensagem.data, metadata.phone_number_id, deps);
         if (nova) result.enqueued++;
         else result.duplicates++;
@@ -187,7 +213,7 @@ async function enfileirar(
     phoneNumberId,
     type,
     timestamp,
-    content,
+    contentCifrado: cifrar(JSON.stringify(content), chaves.cifra),
   };
 
   const nova = await deps.db.transaction(async (tx) => {
@@ -197,7 +223,7 @@ async function enfileirar(
       .onConflictDoNothing()
       .returning();
     if (inserida.length === 0) return false;
-    await deps.queue.send(JOBS.incomingMessage, job, tx, { group: job.phoneHmac });
+    await deps.queue.send(JOBS.incomingMessage, job, tx);
     return true;
   });
 

@@ -20,8 +20,17 @@ export function criarCliente(connectionString: string) {
  * Postgres derruba uma conexão ociosa (restart, failover, proxy que mata conexão parada), o
  * pool emite 'error'; sem listener, o Node relança o evento e o processo inteiro cai.
  */
-export function criarPool(databaseUrl: string, aoErro: (erro: Error) => void): Pool {
-  const pool = new Pool({ connectionString: databaseUrl });
+export function criarPool(
+  databaseUrl: string,
+  limites: { conexaoMs: number; consultaMs: number },
+  aoErro: (erro: Error) => void,
+): Pool {
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    connectionTimeoutMillis: limites.conexaoMs,
+    // No servidor: a consulta presa é cancelada pelo Postgres, que libera os locks dela.
+    statement_timeout: limites.consultaMs,
+  });
   pool.on('error', aoErro);
   return pool;
 }

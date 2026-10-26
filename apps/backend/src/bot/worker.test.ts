@@ -1,51 +1,69 @@
-import type { Db } from '@lumens/db';
+import { sql, type Db } from '@lumens/db';
 import { criarBancoEmMemoria } from '@lumens/db/teste';
 import { pino } from 'pino';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { JOBS } from '../queue';
+import { cifrar, type Chaves } from '../cripto';
+import { JOBS, StaleJobError } from '../queue';
 import { FakeQueue, jobsConcluidos, prepararFilaFalsa, respostasNaFila } from '../queue.fake';
-import { GREETING_TEXT, MENU_TEXT, type HandlerRegistry } from './conversation/handlers';
+import {
+  defaultHandlers,
+  GREETING_TEXT,
+  MENU_TEXT,
+  type HandlerRegistry,
+} from './conversation/handlers';
 import { ConversationStore } from './conversation/store';
 import type { ConteudoMensagem, IncomingMessageJob } from './webhook/process';
 import {
   BOT_QUEUE_OPTIONS,
   BOT_WORK_OPTIONS,
+  inputOf,
   logSender,
   processIncomingJob,
   registerIncomingWorker,
   registerReplyWorker,
-  textOf,
+  respostasDoJob,
   UNSUPPORTED_TEXT,
   type OutgoingReplies,
   type WorkerDeps,
 } from './worker';
 
 const PHONE_HMAC = 'a'.repeat(64);
+const chaves: Chaves = { cifra: Buffer.alloc(32, 7), hmac: Buffer.alloc(32, 8) };
 let contador = 0;
 
-function job(content: ConteudoMensagem, type = 'text'): { id: string; data: IncomingMessageJob } {
+interface JobDeTeste {
+  id: string;
+  retryCount: number;
+  createdOn: Date;
+  data: IncomingMessageJob;
+}
+
+function job(content: ConteudoMensagem, type = 'text', phoneHmac = PHONE_HMAC): JobDeTeste {
   contador++;
   return {
     id: `job-${String(contador)}`,
+    retryCount: 0,
+    createdOn: new Date(1_700_000_000_000 + contador),
     data: {
       wamidHmac: `w${String(contador)}`,
       wamidCifrado: 'x',
-      phoneHmac: PHONE_HMAC,
+      phoneHmac,
       phoneCifrado: 'telefone-cifrado',
       phoneNumberId: 'PNID',
       type,
       timestamp: '1700000000',
-      content,
+      contentCifrado: cifrar(JSON.stringify(content), chaves.cifra),
     },
   };
 }
 
-const texto = (body: string) => job({ text: { body } });
+const texto = (body: string, phoneHmac?: string) => job({ text: { body } }, 'text', phoneHmac);
 
 let db: Db;
 let queue: FakeQueue;
 let deps: WorkerDeps;
-const respostas = () => respostasNaFila(db);
+const respostas = async () =>
+  (await respostasNaFila(db)).map((linha) => respostasDoJob(linha.data, chaves));
 const passo = async () => (await deps.store.get(PHONE_HMAC))?.step;
 
 // PGlite leva alguns segundos para subir no primeiro teste.
@@ -58,33 +76,33 @@ beforeEach(async () => {
     store: new ConversationStore(db),
     queue,
     logger: pino({ level: 'silent' }),
+    chaves,
     retryDelaysMs: [0, 0],
   };
 }, 20_000);
 
-describe('textOf', () => {
-  it.each([
-    ['texto', texto('oi').data, 'oi'],
+describe('inputOf', () => {
+  it.each<[string, ConteudoMensagem, ReturnType<typeof inputOf>]>([
+    ['texto', { text: { body: 'oi' } }, { text: 'oi' }],
     [
       'botão',
-      job({ interactive: { type: 'button_reply', button_reply: { id: '2', title: 'Nova' } } }).data,
-      '2',
+      { interactive: { type: 'button_reply', button_reply: { id: '2', title: 'Nova' } } },
+      { text: '2' },
     ],
     [
       'lista',
-      job({ interactive: { type: 'list_reply', list_reply: { id: '3', title: 'Verificar' } } })
-        .data,
-      '3',
+      { interactive: { type: 'list_reply', list_reply: { id: '3', title: 'Verificar' } } },
+      { text: '3' },
     ],
-    ['botão de template', job({ button: { text: 'Sim', payload: 'sim' } }, 'button').data, 'sim'],
+    ['botão de template', { button: { text: 'Sim', payload: 'sim' } }, { text: 'sim' }],
     [
-      'imagem',
-      job({ image: { id: '1', mime_type: 'image/jpeg', sha256: 's' } }, 'image').data,
-      null,
+      'imagem (a legenda não vira resposta)',
+      { image: { id: 'm1', mime_type: 'image/jpeg', sha256: 's', caption: 'legenda' } },
+      { text: '', image: { id: 'm1', mimeType: 'image/jpeg' } },
     ],
-    ['áudio', job({}, 'audio').data, null],
-  ])('%s', (_, entrada, esperado) => {
-    expect(textOf(entrada)).toBe(esperado);
+    ['áudio', {}, null],
+  ])('%s', (_, conteudo, esperado) => {
+    expect(inputOf(conteudo)).toEqual(esperado);
   });
 });
 
@@ -94,24 +112,33 @@ describe('processIncomingJob', () => {
     expect(await processIncomingJob(entrada, deps)).toEqual([GREETING_TEXT, MENU_TEXT]);
 
     expect(await passo()).toBe('MENU');
-    expect(await respostas()).toEqual([
-      {
-        data: {
-          phoneHmac: PHONE_HMAC,
-          phoneCifrado: 'telefone-cifrado',
-          phoneNumberId: 'PNID',
-          wamidHmac: entrada.data.wamidHmac,
-          replies: [GREETING_TEXT, MENU_TEXT],
-        },
-        grupo: PHONE_HMAC,
-      },
-    ]);
+    const [saida] = await respostasNaFila(db);
+    expect(saida?.data).toMatchObject({
+      phoneHmac: PHONE_HMAC,
+      phoneCifrado: 'telefone-cifrado',
+      phoneNumberId: 'PNID',
+      wamidHmac: entrada.data.wamidHmac,
+    });
+    expect(await respostas()).toEqual([[GREETING_TEXT, MENU_TEXT]]);
     expect(await jobsConcluidos(db)).toEqual([{ name: JOBS.incomingMessage, id: entrada.id }]);
+  });
+
+  it('o texto da pessoa e as respostas não ficam em claro na fila', async () => {
+    const email = 'meu.email@ufal.br';
+    await processIncomingJob(texto('2'), deps);
+    await processIncomingJob(texto(email), deps);
+    const linhas = (await db.execute(sql`select data::text as data from fake_job`)) as {
+      rows: { data: string }[];
+    };
+    for (const { data } of linhas.rows) {
+      expect(data).not.toContain('Qual o título');
+      expect(data).not.toContain(email);
+    }
   });
 
   it('tipo sem texto responde que ainda não entende e não mexe na conversa', async () => {
     await processIncomingJob(job({}, 'audio'), deps);
-    expect((await respostas())[0]?.data.replies).toEqual([UNSUPPORTED_TEXT]);
+    expect(await respostas()).toEqual([[UNSUPPORTED_TEXT]]);
     expect(await passo()).toBeUndefined();
   });
 
@@ -132,12 +159,25 @@ describe('processIncomingJob', () => {
     expect(await passo()).toBe('NEW_ASK_TITLE');
     expect(await jobsConcluidos(db)).toHaveLength(2);
   });
+
+  it('job que expirou e foi pego de novo: esta tentativa desfaz tudo', async () => {
+    await processIncomingJob(texto('oi'), deps);
+    const dois = texto('2');
+    // Enquanto esta tentativa rodava, o job expirou e voltou como tentativa 1.
+    queue.tentativas.set(dois.id, 1);
+
+    await expect(processIncomingJob(dois, deps)).rejects.toBeInstanceOf(StaleJobError);
+    expect(await passo()).toBe('MENU');
+    expect(await respostas()).toHaveLength(1);
+  });
 });
+
+type HandlerFalso = (jobs: JobDeTeste[] | { id: string; data: unknown }[]) => Promise<unknown>;
 
 /** pg-boss falso: guarda as filas criadas e o handler registrado. */
 function bossFalso(filasExistentes: string[] = []) {
   const chamadas: unknown[][] = [];
-  const handlers = new Map<string, (jobs: { id: string; data: unknown }[]) => Promise<unknown>>();
+  const handlers = new Map<string, HandlerFalso>();
   const boss = {
     getQueue: (nome: string) => Promise.resolve(filasExistentes.includes(nome) ? {} : null),
     createQueue: (...a: unknown[]) => {
@@ -148,11 +188,7 @@ function bossFalso(filasExistentes: string[] = []) {
       chamadas.push(['updateQueue', ...a]);
       return Promise.resolve();
     },
-    work: (
-      nome: string,
-      opcoes: unknown,
-      h: (jobs: { id: string; data: unknown }[]) => Promise<unknown>,
-    ) => {
+    work: (nome: string, opcoes: unknown, h: HandlerFalso) => {
       chamadas.push(['work', nome, opcoes]);
       handlers.set(nome, h);
       return Promise.resolve('w1');
@@ -169,8 +205,10 @@ function bossFalso(filasExistentes: string[] = []) {
   };
 }
 
+const statuses = (resultados: unknown) => (resultados as { status: string }[]).map((r) => r.status);
+
 describe('registerIncomingWorker', () => {
-  it('cria a fila de mortas e a fila, e busca em lotes com rajada, um job ativo por telefone', async () => {
+  it('cria a fila de mortas e a fila, e busca em lotes com rajada e metadados', async () => {
     const { boss, chamadas } = bossFalso();
     await registerIncomingWorker(boss, deps);
 
@@ -187,8 +225,10 @@ describe('registerIncomingWorker', () => {
     expect(BOT_WORK_OPTIONS).toMatchObject({
       burstWhenBatchFull: true,
       perJobResults: true,
-      groupConcurrency: 1,
+      includeMetadata: true,
     });
+    // groupConcurrency faria o pg-boss escolher o job de cada telefone pelo UUID, fora de ordem.
+    expect(BOT_WORK_OPTIONS).not.toHaveProperty('groupConcurrency');
     expect(BOT_WORK_OPTIONS.batchSize).toBeGreaterThan(1);
     expect(BOT_WORK_OPTIONS.pollingIntervalSeconds).toBeLessThanOrEqual(0.5);
   });
@@ -203,15 +243,15 @@ describe('registerIncomingWorker', () => {
     ]);
   });
 
-  it('processa o lote em ordem de chegada e conclui cada job', async () => {
+  it('aplica o lote na ordem de chegada, mesmo que o pg-boss o devolva embaralhado', async () => {
     const { boss, handler } = bossFalso();
     await registerIncomingWorker(boss, deps);
 
-    const lote = [texto('oi'), texto('2'), texto('Bebedouro')];
-    const resultados = await handler(JOBS.incomingMessage)(lote);
-    expect(resultados).toEqual(lote.map((j) => ({ id: j.id, status: 'completed' })));
+    const [oi, dois, titulo] = [texto('oi'), texto('2'), texto('Bebedouro')];
+    const resultados = await handler(JOBS.incomingMessage)([titulo, oi, dois]);
+    expect(statuses(resultados)).toEqual(['completed', 'completed', 'completed']);
     expect(await passo()).toBe('NEW_ASK_PLACE');
-    expect(await jobsConcluidos(db)).toHaveLength(3);
+    expect((await jobsConcluidos(db)).map((j) => j.id)).toEqual([oi.id, dois.id, titulo.id]);
   });
 
   it('falha passageira é tentada de novo antes da próxima mensagem, mantendo a ordem', async () => {
@@ -225,28 +265,28 @@ describe('registerIncomingWorker', () => {
       if (falhas-- > 0) return Promise.reject(new Error('banco piscou'));
       return enviar(...args);
     };
-    const lote = [texto('2'), texto('Bebedouro')];
-    const resultados = await handler(JOBS.incomingMessage)(lote);
+    const resultados = await handler(JOBS.incomingMessage)([texto('2'), texto('Bebedouro')]);
 
-    expect(resultados).toEqual(lote.map((j) => ({ id: j.id, status: 'completed' })));
+    expect(statuses(resultados)).toEqual(['completed', 'completed']);
     // "2" foi aplicado antes de "Bebedouro": a conversa passou por NEW_ASK_TITLE.
     expect(await passo()).toBe('NEW_ASK_PLACE');
   });
 
   it('mensagem que sempre falha vai para a fila de mortas sozinha; o resto do lote segue', async () => {
     const handlers: HandlerRegistry = {
-      ...(await import('./conversation/handlers')).defaultHandlers,
+      ...defaultHandlers,
       // Transição inválida: bug do handler, não adianta tentar de novo.
       MENU: () => ({ next: 'NEW_ASK_PHOTO', replies: [] }),
     };
     const { boss, handler } = bossFalso();
     await registerIncomingWorker(boss, { ...deps, handlers });
 
-    const outro = { ...texto('oi'), data: { ...texto('oi').data, phoneHmac: 'b'.repeat(64) } };
-    const lote = [texto('oi'), texto('qualquer'), outro];
-    const resultados = (await handler(JOBS.incomingMessage)(lote)) as { status: string }[];
-
-    expect(resultados.map((r) => r.status)).toEqual(['completed', 'deadletter', 'completed']);
+    const lote = [texto('oi'), texto('qualquer'), texto('oi', 'b'.repeat(64))];
+    expect(statuses(await handler(JOBS.incomingMessage)(lote))).toEqual([
+      'completed',
+      'deadletter',
+      'completed',
+    ]);
     expect(await jobsConcluidos(db)).toHaveLength(2);
   });
 
@@ -254,32 +294,51 @@ describe('registerIncomingWorker', () => {
     const { boss, handler } = bossFalso();
     await registerIncomingWorker(boss, deps);
 
-    const antigo = { id: 'antigo', data: { from: '5582999990000', text: 'oi' } };
-    const lote = [antigo, texto('oi')];
-    const resultados = (await handler(JOBS.incomingMessage)(lote)) as { status: string }[];
+    const antigo = {
+      id: 'antigo',
+      retryCount: 0,
+      createdOn: new Date(0),
+      data: { from: '5582999990000', text: 'oi' },
+    };
+    const resultados = await handler(JOBS.incomingMessage)([antigo, texto('oi')] as JobDeTeste[]);
 
-    expect(resultados.map((r) => r.status)).toEqual(['deadletter', 'completed']);
+    expect(statuses(resultados)).toEqual(['deadletter', 'completed']);
     expect(await passo()).toBe('MENU');
+  });
+
+  it('job que expirou durante o processamento não é tentado de novo nem vai para as mortas', async () => {
+    const { boss, handler } = bossFalso();
+    await registerIncomingWorker(boss, deps);
+    const velho = texto('oi');
+    queue.tentativas.set(velho.id, 1);
+
+    expect(statuses(await handler(JOBS.incomingMessage)([velho]))).toEqual(['failed']);
+    expect(await passo()).toBeUndefined();
   });
 });
 
 describe('registerReplyWorker', () => {
-  const saida = (replies: string[]): OutgoingReplies => ({
-    phoneHmac: PHONE_HMAC,
-    phoneCifrado: 'c',
-    phoneNumberId: 'PNID',
-    wamidHmac: 'w',
-    replies,
+  const saida = (replies: string[], createdOn = new Date()) => ({
+    id: replies.join(),
+    retryCount: 0,
+    createdOn,
+    data: {
+      phoneHmac: PHONE_HMAC,
+      phoneCifrado: 'c',
+      phoneNumberId: 'PNID',
+      wamidHmac: 'w',
+      repliesCifradas: cifrar(JSON.stringify(replies), chaves.cifra),
+    } satisfies OutgoingReplies,
   });
 
-  it('entrega cada lote de respostas pelo sender', async () => {
+  it('entrega as respostas pelo sender, na ordem de chegada', async () => {
     const { boss, chamadas, handler } = bossFalso();
-    const entregues: OutgoingReplies[] = [];
+    const entregues: string[][] = [];
     await registerReplyWorker(
       boss,
       {
         send: (mensagem) => {
-          entregues.push(mensagem);
+          entregues.push(respostasDoJob(mensagem, chaves));
           return Promise.resolve();
         },
       },
@@ -292,8 +351,11 @@ describe('registerReplyWorker', () => {
       { ...BOT_QUEUE_OPTIONS, deadLetter: JOBS.outgoingRepliesDead },
     ]);
 
-    await handler(JOBS.outgoingReplies)([{ id: 'j', data: saida(['oi']) }]);
-    expect(entregues).toEqual([saida(['oi'])]);
+    await handler(JOBS.outgoingReplies)([
+      saida(['segunda'], new Date(2000)),
+      saida(['primeira'], new Date(1000)),
+    ]);
+    expect(entregues).toEqual([['primeira'], ['segunda']]);
   });
 
   it('um envio que falha não derruba os outros do lote', async () => {
@@ -302,19 +364,19 @@ describe('registerReplyWorker', () => {
       boss,
       {
         send: (mensagem) =>
-          mensagem.replies[0] === 'falha'
+          respostasDoJob(mensagem, chaves)[0] === 'falha'
             ? Promise.reject(new Error('Meta fora'))
             : Promise.resolve(),
       },
       deps.logger,
     );
     const resultados = (await handler(JOBS.outgoingReplies)([
-      { id: 'a', data: saida(['falha']) },
-      { id: 'b', data: saida(['ok']) },
+      saida(['falha'], new Date(1)),
+      saida(['ok'], new Date(2)),
     ])) as { id: string; status: string }[];
     expect(resultados.map((r) => [r.id, r.status])).toEqual([
-      ['a', 'failed'],
-      ['b', 'completed'],
+      ['falha', 'failed'],
+      ['ok', 'completed'],
     ]);
   });
 });
@@ -323,19 +385,16 @@ describe('logSender', () => {
   it('não põe o texto das respostas no log', async () => {
     const logs: string[] = [];
     const logger = pino({ level: 'info' }, { write: (linha: string) => logs.push(linha) });
-    await logSender(logger).send(saidaComTexto('meu.email@ufal.br'));
+    const mensagem: OutgoingReplies = {
+      phoneHmac: PHONE_HMAC,
+      phoneCifrado: 'c',
+      phoneNumberId: 'P',
+      wamidHmac: 'w',
+      repliesCifradas: cifrar(JSON.stringify(['meu.email@ufal.br']), chaves.cifra),
+    };
+    await logSender(logger, chaves).send(mensagem);
     expect(logs).toHaveLength(1);
     expect(logs[0]).not.toContain('meu.email@ufal.br');
     expect(JSON.parse(logs[0] ?? '{}')).toMatchObject({ respostas: 1 });
   });
 });
-
-function saidaComTexto(texto: string): OutgoingReplies {
-  return {
-    phoneHmac: PHONE_HMAC,
-    phoneCifrado: 'c',
-    phoneNumberId: 'P',
-    wamidHmac: 'w',
-    replies: [texto],
-  };
-}

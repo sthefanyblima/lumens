@@ -1,12 +1,13 @@
 import type { Db } from '@lumens/db';
 import type { JobResult, PgBoss, Queue } from 'pg-boss';
+import { cifrar, decifrar, type Chaves } from '../cripto';
 import { resumoDoErro, type Logger } from '../logger';
-import { JOBS, type JobQueue } from '../queue';
-import type { HandlerRegistry } from './conversation/handlers';
+import { JOBS, StaleJobError, type JobAttempt, type JobQueue } from '../queue';
+import type { HandlerRegistry, IncomingMessage } from './conversation/handlers';
 import { handleIncoming } from './conversation/router';
 import { InvalidTransitionError } from './conversation/steps';
 import type { ConversationStore } from './conversation/store';
-import type { IncomingMessageJob } from './webhook/process';
+import { conteudoDoJob, type ConteudoMensagem, type IncomingMessageJob } from './webhook/process';
 
 /** Respostas a entregar para uma conversa (fila JOBS.outgoingReplies). */
 export interface OutgoingReplies {
@@ -16,7 +17,15 @@ export interface OutgoingReplies {
   phoneNumberId: string;
   /** O wamid da mensagem respondida, para correlacionar. */
   wamidHmac: string;
-  replies: string[];
+  /**
+   * As respostas (`string[]` em JSON), cifradas com a CHAVE_CIFRA: uma resposta pode repetir o
+   * que a pessoa escreveu. Leia com `respostasDoJob`.
+   */
+  repliesCifradas: string;
+}
+
+export function respostasDoJob(message: OutgoingReplies, chaves: Chaves): string[] {
+  return JSON.parse(decifrar(message.repliesCifradas, chaves.cifra)) as string[];
 }
 
 /** Quem entrega as respostas ao usuário. */
@@ -29,6 +38,7 @@ export interface WorkerDeps {
   store: ConversationStore;
   queue: JobQueue;
   logger: Logger;
+  chaves: Chaves;
   handlers?: HandlerRegistry;
   /** Espera antes de cada nova tentativa de uma mensagem que falhou (veja INCOMING_RETRY_DELAYS_MS). */
   retryDelaysMs?: readonly number[];
@@ -63,27 +73,38 @@ export const BOT_QUEUE_OPTIONS = {
  *
  * `perJobResults`: cada job do lote é concluído ou falha sozinho. Sem isso, um erro em um job
  * fazia o pg-boss falhar o lote inteiro, e os outros nove gastavam tentativa junto com ele.
- * `groupConcurrency: 1`: no máximo um job ativo por telefone (o grupo é o `phoneHmac`), mesmo
- * com várias instâncias do servidor.
+ * `includeMetadata`: traz o `createdOn`. O pg-boss escolhe o lote pelos mais antigos, mas o
+ * devolve em ordem qualquer; o worker reordena (veja `emOrdemDeChegada`).
+ *
+ * Sem `groupConcurrency`: o pg-boss escolhe o job de cada grupo pelo id (UUID aleatório), não
+ * pela data, e trocaria a ordem das mensagens do mesmo telefone.
  */
 export const BOT_WORK_OPTIONS = {
   batchSize: 10,
   burstWhenBatchFull: true,
   pollingIntervalSeconds: 0.5,
   perJobResults: true,
-  groupConcurrency: 1,
+  includeMetadata: true,
 } as const;
 
+/** Ordena o lote pela criação do job, que é a ordem em que o webhook recebeu as mensagens. */
+export function emOrdemDeChegada<T extends { createdOn: Date }>(jobs: T[]): T[] {
+  return [...jobs].sort((a, b) => a.createdOn.getTime() - b.createdOn.getTime());
+}
+
 /**
- * O texto que a conversa entende. Respostas de botão e de lista valem pelo id (é o que o
- * bot vai definir ao montar os botões); imagem, áudio e o resto ainda não têm texto.
+ * O que a conversa entende da mensagem. Respostas de botão e de lista valem pelo id (é o que o
+ * bot vai definir ao montar os botões). Imagem vai com texto vazio: a legenda não é resposta a
+ * pergunta nenhuma. Áudio, vídeo, documento e o resto ainda não são entendidos (null).
  */
-export function textOf(job: IncomingMessageJob): string | null {
-  const { content } = job;
-  if (content.text) return content.text.body;
+export function inputOf(content: ConteudoMensagem): IncomingMessage | null {
+  if (content.text) return { text: content.text.body };
   const reply = content.interactive?.button_reply ?? content.interactive?.list_reply;
-  if (reply) return reply.id;
-  if (content.button) return content.button.payload ?? content.button.text;
+  if (reply) return { text: reply.id };
+  if (content.button) return { text: content.button.payload ?? content.button.text };
+  if (content.image) {
+    return { text: '', image: { id: content.image.id, mimeType: content.image.mime_type } };
+  }
   return null;
 }
 
@@ -94,17 +115,17 @@ export function textOf(job: IncomingMessageJob): string | null {
  * do commit, o job já está concluído e não volta. A mensagem é aplicada exatamente uma vez.
  */
 export async function processIncomingJob(
-  job: { id: string; data: IncomingMessageJob },
+  job: JobAttempt & { data: IncomingMessageJob },
   deps: WorkerDeps,
 ): Promise<string[]> {
   const { data } = job;
-  const text = textOf(data);
+  const input = inputOf(conteudoDoJob(data, deps.chaves));
   return deps.db.transaction(async (tx) => {
     const replies =
-      text === null
+      input === null
         ? [UNSUPPORTED_TEXT]
         : await handleIncoming(
-            { phoneHmac: data.phoneHmac, text },
+            { phoneHmac: data.phoneHmac, ...input },
             {
               store: deps.store.withDb(tx),
               ...(deps.handlers ? { handlers: deps.handlers } : {}),
@@ -115,10 +136,10 @@ export async function processIncomingJob(
       phoneCifrado: data.phoneCifrado,
       phoneNumberId: data.phoneNumberId,
       wamidHmac: data.wamidHmac,
-      replies,
+      repliesCifradas: cifrar(JSON.stringify(replies), deps.chaves.cifra),
     };
-    await deps.queue.send(JOBS.outgoingReplies, outgoing, tx, { group: data.phoneHmac });
-    await deps.queue.complete(JOBS.incomingMessage, job.id, tx);
+    await deps.queue.send(JOBS.outgoingReplies, outgoing, tx);
+    await deps.queue.complete(JOBS.incomingMessage, job, tx);
     return replies;
   });
 }
@@ -150,7 +171,7 @@ function conversaDoLog(data: unknown): string | null {
  * Transição inválida é bug do handler, não falha passageira: não adianta tentar de novo.
  */
 async function processWithRetries(
-  job: { id: string; data: IncomingMessageJob },
+  job: JobAttempt & { data: IncomingMessageJob },
   deps: WorkerDeps,
 ): Promise<JobResult> {
   const delays = deps.retryDelaysMs ?? INCOMING_RETRY_DELAYS_MS;
@@ -161,6 +182,11 @@ async function processWithRetries(
     } catch (erro) {
       const delay = delays[tentativa];
       const log = deps.logger.child({ conversa: conversaDoLog(job.data) });
+      if (erro instanceof StaleJobError) {
+        // Outra tentativa é dona do job agora e vai aplicá-lo; o resultado desta não vale mais.
+        log.warn('job expirou durante o processamento; fica para a tentativa nova');
+        return { id: job.id, status: 'failed', output: resumoDoErro(erro) };
+      }
       if (delay === undefined || erro instanceof InvalidTransitionError) {
         log.error({ erro: resumoDoErro(erro) }, 'mensagem descartada para a fila de mortas');
         return { id: job.id, status: 'deadletter', output: resumoDoErro(erro) };
@@ -179,11 +205,15 @@ async function processWithRetries(
  */
 export async function registerIncomingWorker(boss: Boss, deps: WorkerDeps): Promise<void> {
   await prepareQueue(boss, JOBS.incomingMessage, JOBS.incomingMessageDead);
-  await boss.work<IncomingMessageJob>(JOBS.incomingMessage, BOT_WORK_OPTIONS, async (jobs) => {
-    const results: JobResult[] = [];
-    for (const job of jobs) results.push(await processWithRetries(job, deps));
-    return results;
-  });
+  await boss.work<IncomingMessageJob, unknown, typeof BOT_WORK_OPTIONS>(
+    JOBS.incomingMessage,
+    BOT_WORK_OPTIONS,
+    async (jobs) => {
+      const results: JobResult[] = [];
+      for (const job of emOrdemDeChegada(jobs)) results.push(await processWithRetries(job, deps));
+      return results;
+    },
+  );
 }
 
 /**
@@ -197,21 +227,25 @@ export async function registerReplyWorker(
   logger: Logger,
 ): Promise<void> {
   await prepareQueue(boss, JOBS.outgoingReplies, JOBS.outgoingRepliesDead);
-  await boss.work<OutgoingReplies>(JOBS.outgoingReplies, BOT_WORK_OPTIONS, async (jobs) => {
-    const results: JobResult[] = [];
-    for (const job of jobs) {
-      try {
-        await sender.send(job.data);
-        results.push({ id: job.id, status: 'completed' });
-      } catch (erro) {
-        logger
-          .child({ conversa: conversaDoLog(job.data) })
-          .warn({ erro: resumoDoErro(erro) }, 'envio das respostas falhou');
-        results.push({ id: job.id, status: 'failed', output: resumoDoErro(erro) });
+  await boss.work<OutgoingReplies, unknown, typeof BOT_WORK_OPTIONS>(
+    JOBS.outgoingReplies,
+    BOT_WORK_OPTIONS,
+    async (jobs) => {
+      const results: JobResult[] = [];
+      for (const job of emOrdemDeChegada(jobs)) {
+        try {
+          await sender.send(job.data);
+          results.push({ id: job.id, status: 'completed' });
+        } catch (erro) {
+          logger
+            .child({ conversa: conversaDoLog(job.data) })
+            .warn({ erro: resumoDoErro(erro) }, 'envio das respostas falhou');
+          results.push({ id: job.id, status: 'failed', output: resumoDoErro(erro) });
+        }
       }
-    }
-    return results;
-  });
+      return results;
+    },
+  );
 }
 
 /**
@@ -219,14 +253,15 @@ export async function registerReplyWorker(
  * até lá é assim que se vê a conversa andando (`pnpm dev` + `pnpm sim`). Sem o texto das
  * respostas: ele pode repetir o que a pessoa escreveu, e o log não guarda dado pessoal.
  */
-export function logSender(logger: Logger): ReplySender {
+export function logSender(logger: Logger, chaves: Chaves): ReplySender {
   return {
     send: (message) => {
+      const replies = respostasDoJob(message, chaves);
       logger.info(
         {
           conversa: conversaDoLog(message),
-          respostas: message.replies.length,
-          caracteres: message.replies.reduce((total, r) => total + r.length, 0),
+          respostas: replies.length,
+          caracteres: replies.reduce((total, r) => total + r.length, 0),
         },
         'respostas do bot (envio pela Meta ainda não implementado)',
       );

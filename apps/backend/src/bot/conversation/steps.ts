@@ -49,7 +49,7 @@ export const TRANSITIONS: Record<Step, readonly Step[]> = {
   NEW_ASK_TITLE: ['NEW_ASK_PLACE'],
   NEW_ASK_PLACE: ['NEW_ASK_DESCRIPTION'],
   NEW_ASK_DESCRIPTION: ['NEW_ASK_PHOTO'],
-  NEW_ASK_PHOTO: ['MENU'],
+  NEW_ASK_PHOTO: ['MENU', 'NEW_ASK_PHOTO'],
 };
 
 /** Qualquer passo pode ir para estes via comandos globais ('menu', 'cancelar'). */

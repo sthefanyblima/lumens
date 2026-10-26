@@ -1,15 +1,17 @@
 import type { ConversationData, ConversationState } from './store';
 import { TRANSITIONS, type Step } from './steps';
 
-/** Mensagem de texto recebida (já normalizada pelo webhook). */
-export interface IncomingText {
+/** Mensagem recebida. Foto chega com `text` vazio e o `image`. */
+export interface IncomingMessage {
   text: string;
+  /** Foto enviada pela pessoa. `id` é o id da mídia na Meta (baixada depois, na 2.6). */
+  image?: { id: string; mimeType: string };
 }
 
 export interface StepContext {
   /** Estado atual (passo + dados). Para usuário novo, step = GREETING e data = {}. */
   state: Pick<ConversationState, 'step' | 'data'>;
-  input: IncomingText;
+  input: IncomingMessage;
 }
 
 /** Patch raso aplicado sobre state.data: chave com undefined remove. */
@@ -33,9 +35,17 @@ export const MENU_TEXT = [
   '3 Verificar e-mail',
 ].join('\n');
 
-/** Remove acentos, caixa e espaços das pontas. */
+/**
+ * Remove acentos, caixa, espaços das pontas e a pontuação do fim: "Cancelar." e "1)" valem
+ * como "cancelar" e "1".
+ */
 export function normalize(text: string): string {
-  return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
+  return text
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[\s.!?,;:)\]-]+$/u, '');
 }
 
 const greeting: StepHandler = () => ({ next: 'MENU', replies: [GREETING_TEXT, MENU_TEXT] });
@@ -76,6 +86,24 @@ function placeholder(step: Step, story: string): StepHandler {
   });
 }
 
+export const PHOTO_ASK_TEXT = "Envie uma foto do problema, ou responda 'pular'.";
+export const PHOTO_RECEIVED_TEXT = 'Foto recebida, obrigado!';
+const SKIP_WORDS = new Set(['pular', 'nao', 'sem foto']);
+
+/** Pede a foto da nova pauta. Aceita a foto ou "pular"; qualquer outro texto pede de novo. */
+const newAskPhoto: StepHandler = ({ input }) => {
+  // TODO(2.6): baixar a mídia da Meta e passar por removerMetadados antes de guardar.
+  if (input.image) {
+    return {
+      next: 'MENU',
+      data: { fotoMediaId: input.image.id },
+      replies: [PHOTO_RECEIVED_TEXT],
+    };
+  }
+  if (SKIP_WORDS.has(normalize(input.text))) return { next: 'MENU', replies: ['Ok, sem foto.'] };
+  return { next: 'NEW_ASK_PHOTO', replies: [PHOTO_ASK_TEXT] };
+};
+
 export const defaultHandlers: HandlerRegistry = {
   GREETING: greeting,
   MENU: menu,
@@ -91,5 +119,5 @@ export const defaultHandlers: HandlerRegistry = {
   NEW_ASK_TITLE: placeholder('NEW_ASK_TITLE', '2.6'),
   NEW_ASK_PLACE: placeholder('NEW_ASK_PLACE', '2.6'),
   NEW_ASK_DESCRIPTION: placeholder('NEW_ASK_DESCRIPTION', '2.6'),
-  NEW_ASK_PHOTO: placeholder('NEW_ASK_PHOTO', '2.6'),
+  NEW_ASK_PHOTO: newAskPhoto,
 };

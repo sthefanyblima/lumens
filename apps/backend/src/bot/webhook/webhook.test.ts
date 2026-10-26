@@ -11,7 +11,7 @@ import { FakeQueue, mensagensNaFila, prepararFilaFalsa } from '../../queue.fake'
 import { hashPhone } from '../conversation/phone';
 import { FIXTURES_DIR } from '../sim/fixtures';
 import { signBody } from '../whatsapp/signature';
-import { DEDUP_TTL_MS, deleteOldDedup } from './process';
+import { DEDUP_TTL_MS, deleteOldDedup, conteudoDoJob } from './process';
 
 const config = { verifyToken: 'verify-SECRET-123', appSecret: 'segredo-app' };
 const chaves: Chaves = { cifra: Buffer.alloc(32, 1), hmac: Buffer.alloc(32, 2) };
@@ -130,8 +130,23 @@ describe('webhook da Meta', () => {
       phoneNumberId: 'PNID',
       type: 'text',
       timestamp: '1700000000',
-      content: { text: { body: 'oi' } },
     });
+    if (!job) throw new Error('nada foi enfileirado');
+    expect(conteudoDoJob(job.data, chaves)).toEqual({ text: { body: 'oi' } });
+  });
+
+  it('o texto da pessoa vai cifrado para a fila', async () => {
+    await post(textPayload('wamid.TXT', 'meu email é fulana@ufal.br'));
+    const [job] = await jobs(db);
+    if (!job) throw new Error('nada foi enfileirado');
+    expect(JSON.stringify(job)).not.toContain('fulana@ufal.br');
+    expect(conteudoDoJob(job.data, chaves).text?.body).toBe('meu email é fulana@ufal.br');
+  });
+
+  it.each(['reaction', 'system'])('mensagem do tipo %s não vai para a fila', async (type) => {
+    const res = await post(payloadCom({ metadata, messages: [{ ...mensagem('wamid.R'), type }] }));
+    expect(res.statusCode).toBe(200);
+    expect(await jobs(db)).toHaveLength(0);
   });
 
   it('nem telefone, nem wamid, nem nome vão em claro para a fila, o banco ou o log', async () => {
@@ -243,7 +258,8 @@ describe('webhook da Meta', () => {
     const res = await post(textPayload('wamid.NUL', 'a\u0000b \ud83d fim'));
     expect(res.statusCode).toBe(200);
     const [job] = await jobs(db);
-    expect(job?.data.content.text?.body).toBe('ab � fim');
+    if (!job) throw new Error('nada foi enfileirado');
+    expect(conteudoDoJob(job.data, chaves).text?.body).toBe('ab � fim');
   });
 
   it.each([
@@ -299,7 +315,11 @@ describe('webhook da Meta', () => {
     };
     await post(payloadCom({ metadata, messages: [citada] }));
     const [job] = await jobs(db);
-    expect(job?.data.content).toEqual({ text: { body: 'oi' }, context: { forwarded: true } });
+    if (!job) throw new Error('nada foi enfileirado');
+    expect(conteudoDoJob(job.data, chaves)).toEqual({
+      text: { body: 'oi' },
+      context: { forwarded: true },
+    });
   });
 
   it('deleteOldDedup apaga só o que passou da janela de reenvio da Meta', async () => {
@@ -325,6 +345,7 @@ describe('webhook da Meta', () => {
     const res = await post(raw);
     expect(res.statusCode).toBe(200);
     const [job] = await jobs(db);
-    expect(job?.data.content).toEqual({ text: { body: 'buraco no bloco 12' } });
+    if (!job) throw new Error('nada foi enfileirado');
+    expect(conteudoDoJob(job.data, chaves)).toEqual({ text: { body: 'buraco no bloco 12' } });
   });
 });

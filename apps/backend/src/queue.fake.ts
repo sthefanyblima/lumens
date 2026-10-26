@@ -1,7 +1,7 @@
 import { sql, type Db, type Tx } from '@lumens/db';
 import type { IncomingMessageJob } from './bot/webhook/process';
 import type { OutgoingReplies } from './bot/worker';
-import { JOBS, type JobQueue, type SendOptions } from './queue';
+import { JOBS, StaleJobError, type JobAttempt, type JobQueue } from './queue';
 
 /**
  * Fila falsa para os testes. Grava na MESMA transação, em tabelas do próprio PGlite, como o
@@ -14,25 +14,27 @@ export class FakeQueue implements JobQueue {
   /** Falha numa query com o job nos parâmetros, como um erro real do banco faria. */
   failSendInQuery = false;
 
-  async send(name: string, data: object, tx: Tx, options?: SendOptions) {
+  /** Tentativa atual de cada job, como o pg-boss guarda; ausente = a tentativa do chamador. */
+  readonly tentativas = new Map<string, number>();
+
+  async send(name: string, data: object, tx: Tx) {
     const json = JSON.stringify(data);
-    const grupo = options?.group ?? null;
-    await tx.execute(
-      sql`insert into fake_job (name, data, grupo) values (${name}, ${json}::jsonb, ${grupo})`,
-    );
+    await tx.execute(sql`insert into fake_job (name, data) values (${name}, ${json}::jsonb)`);
     if (this.failSend) throw new Error('fila fora do ar');
     if (this.failSendInQuery) await tx.execute(sql`select ${json}::int`);
     return 'job';
   }
 
-  async complete(name: string, id: string, tx: Tx) {
-    await tx.execute(sql`insert into fake_done (name, id) values (${name}, ${id})`);
+  async complete(name: string, job: JobAttempt, tx: Tx) {
+    const atual = this.tentativas.get(job.id);
+    if (atual !== undefined && atual !== job.retryCount) throw new StaleJobError();
+    await tx.execute(sql`insert into fake_done (name, id) values (${name}, ${job.id})`);
   }
 }
 
 export async function prepararFilaFalsa(db: Db): Promise<void> {
   await db.execute(
-    sql`create table fake_job (id serial primary key, name text not null, data jsonb not null, grupo text)`,
+    sql`create table fake_job (id serial primary key, name text not null, data jsonb not null)`,
   );
   await db.execute(sql`create table fake_done (name text not null, id text not null)`);
 }
@@ -43,18 +45,14 @@ async function linhas<T>(db: Db, consulta: ReturnType<typeof sql>): Promise<T[]>
 }
 
 function consultaDaFila(name: string) {
-  return sql`select data, grupo from fake_job where name = ${name} order by id`;
+  return sql`select data from fake_job where name = ${name} order by id`;
 }
 
-export function mensagensNaFila(
-  db: Db,
-): Promise<{ data: IncomingMessageJob; grupo: string | null }[]> {
+export function mensagensNaFila(db: Db): Promise<{ data: IncomingMessageJob }[]> {
   return linhas(db, consultaDaFila(JOBS.incomingMessage));
 }
 
-export function respostasNaFila(
-  db: Db,
-): Promise<{ data: OutgoingReplies; grupo: string | null }[]> {
+export function respostasNaFila(db: Db): Promise<{ data: OutgoingReplies }[]> {
   return linhas(db, consultaDaFila(JOBS.outgoingReplies));
 }
 

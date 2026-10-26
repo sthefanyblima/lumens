@@ -3,9 +3,16 @@ import { criarBancoEmMemoria } from '@lumens/db/teste';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CLEANUP_CRON, CLEANUP_TZ, registerCleanupJob } from '../../agendador/limpeza-conversas';
 import { JOBS } from '../../queue';
-import { defaultHandlers, GREETING_TEXT, MENU_TEXT } from './handlers';
+import {
+  defaultHandlers,
+  GREETING_TEXT,
+  MENU_TEXT,
+  normalize,
+  PHOTO_ASK_TEXT,
+  PHOTO_RECEIVED_TEXT,
+} from './handlers';
 import { hashPhone } from './phone';
-import { CANCEL_TEXT, handleIncoming } from './router';
+import { CANCEL_TEXT, handleIncoming, NEED_TEXT } from './router';
 import { assertTransition, InvalidTransitionError, STEPS, Step, TRANSITIONS } from './steps';
 import { ConversationStore } from './store';
 
@@ -218,5 +225,66 @@ describe('limpeza agendada das conversas', () => {
     ]);
     if (!worker) throw new Error('registerCleanupJob não registrou o worker');
     expect(await worker()).toEqual({ deleted: 1, dedupDeleted: 0 });
+  });
+});
+
+describe('experiência da pessoa', () => {
+  const foto = { id: 'midia-1', mimeType: 'image/jpeg' };
+  const sendFoto = () => handleIncoming({ phoneHmac: H, text: '', image: foto }, { store });
+
+  it.each([
+    ['Cancelar.', 'cancelar'],
+    ['  MENU! ', 'menu'],
+    ['1.', '1'],
+    ['2)', '2'],
+    ['Pular...', 'pular'],
+  ])('normalize(%j) = %j', (entrada, esperado) => {
+    expect(normalize(entrada)).toBe(esperado);
+  });
+
+  it("'Cancelar.' com pontuação cancela no meio do fluxo", async () => {
+    await send('oi');
+    await send('2');
+    expect(await send('Cancelar.')).toEqual([CANCEL_TEXT, MENU_TEXT]);
+    expect((await store.get(H))?.step).toBe('MENU');
+  });
+
+  it('fim de fluxo mostra o menu de novo', async () => {
+    await send('oi');
+    await send('3');
+    await send('aluno@ufal.br');
+    await send('123456');
+    const replies = await send('Computação');
+    expect(replies.at(-1)).toBe(MENU_TEXT);
+    expect((await store.get(H))?.step).toBe('MENU');
+  });
+
+  it('nova pauta aceita a foto no último passo e guarda o id da mídia', async () => {
+    for (const t of ['oi', '2', 'Bebedouro', 'Bloco 12', 'Vazando']) await send(t);
+    expect((await store.get(H))?.step).toBe('NEW_ASK_PHOTO');
+
+    expect(await sendFoto()).toEqual([PHOTO_RECEIVED_TEXT, MENU_TEXT]);
+    const st = await store.get(H);
+    expect(st?.step).toBe('MENU');
+    expect(st?.data).toMatchObject({ fotoMediaId: 'midia-1' });
+  });
+
+  it("no passo da foto, texto qualquer pede a foto de novo e 'pular' segue sem ela", async () => {
+    for (const t of ['oi', '2', 'Bebedouro', 'Bloco 12', 'Vazando']) await send(t);
+    expect(await send('já mandei')).toEqual([PHOTO_ASK_TEXT]);
+    expect((await store.get(H))?.step).toBe('NEW_ASK_PHOTO');
+    expect((await send('Pular')).at(-1)).toBe(MENU_TEXT);
+    expect((await store.get(H))?.step).toBe('MENU');
+  });
+
+  it('foto fora do passo da foto pede texto e não mexe na conversa', async () => {
+    await send('oi');
+    await send('2');
+    expect(await sendFoto()).toEqual([NEED_TEXT]);
+    expect((await store.get(H))?.step).toBe('NEW_ASK_TITLE');
+  });
+
+  it('foto como primeira mensagem recebe a saudação', async () => {
+    expect(await sendFoto()).toEqual([GREETING_TEXT, MENU_TEXT]);
   });
 });
