@@ -14,7 +14,7 @@
     "sim": "tsx --env-file-if-exists=../../.env scripts/sim.ts",
     "fixtures": "tsx scripts/gerar-fixtures.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "node --env-file-if-exists=../../.env ../../node_modules/vitest/vitest.mjs run --passWithNoTests"
   },
   "dependencies": {
     "@lumens/db": "workspace:*",

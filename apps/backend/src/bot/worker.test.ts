@@ -4,7 +4,13 @@ import { pino } from 'pino';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { cifrar, type Chaves } from '../cripto';
 import { JOBS, StaleJobError } from '../queue';
-import { FakeQueue, jobsConcluidos, prepararFilaFalsa, respostasNaFila } from '../queue.fake';
+import {
+  FakeQueue,
+  jobsConcluidos,
+  mortasNaFila,
+  prepararFilaFalsa,
+  respostasNaFila,
+} from '../queue.fake';
 import {
   defaultHandlers,
   GREETING_TEXT,
@@ -16,6 +22,7 @@ import type { ConteudoMensagem, IncomingMessageJob } from './webhook/process';
 import {
   BOT_QUEUE_OPTIONS,
   BOT_WORK_OPTIONS,
+  INCOMING_QUEUE_POLICY,
   inputOf,
   logSender,
   processIncomingJob,
@@ -23,6 +30,7 @@ import {
   registerReplyWorker,
   respostasDoJob,
   UNSUPPORTED_TEXT,
+  UNBLOCK_CRON,
   type OutgoingReplies,
   type WorkerDeps,
 } from './worker';
@@ -174,23 +182,37 @@ describe('processIncomingJob', () => {
 
 type HandlerFalso = (jobs: JobDeTeste[] | { id: string; data: unknown }[]) => Promise<unknown>;
 
+interface FilaExistente {
+  policy?: string;
+  queuedCount?: number;
+  activeCount?: number;
+}
+
 /** pg-boss falso: guarda as filas criadas e o handler registrado. */
-function bossFalso(filasExistentes: string[] = []) {
+function bossFalso(filasExistentes: string[] | Record<string, FilaExistente> = []) {
+  const existentes: Record<string, FilaExistente> = Array.isArray(filasExistentes)
+    ? Object.fromEntries(filasExistentes.map((nome) => [nome, {}]))
+    : filasExistentes;
   const chamadas: unknown[][] = [];
   const handlers = new Map<string, HandlerFalso>();
+  const registrar =
+    (nome: string) =>
+    (...a: unknown[]) => {
+      chamadas.push([nome, ...a]);
+      return Promise.resolve();
+    };
   const boss = {
-    getQueue: (nome: string) => Promise.resolve(filasExistentes.includes(nome) ? {} : null),
-    createQueue: (...a: unknown[]) => {
-      chamadas.push(['createQueue', ...a]);
-      return Promise.resolve();
+    getQueue: (nome: string) => {
+      const fila = existentes[nome];
+      return Promise.resolve(fila ? { queuedCount: 0, activeCount: 0, ...fila } : null);
     },
-    updateQueue: (...a: unknown[]) => {
-      chamadas.push(['updateQueue', ...a]);
-      return Promise.resolve();
-    },
-    work: (nome: string, opcoes: unknown, h: HandlerFalso) => {
+    createQueue: registrar('createQueue'),
+    updateQueue: registrar('updateQueue'),
+    deleteQueue: registrar('deleteQueue'),
+    schedule: registrar('schedule'),
+    work: (nome: string, opcoes: unknown, h?: HandlerFalso) => {
       chamadas.push(['work', nome, opcoes]);
-      handlers.set(nome, h);
+      handlers.set(nome, h ?? (opcoes as HandlerFalso));
       return Promise.resolve('w1');
     },
   };
@@ -208,19 +230,22 @@ function bossFalso(filasExistentes: string[] = []) {
 const statuses = (resultados: unknown) => (resultados as { status: string }[]).map((r) => r.status);
 
 describe('registerIncomingWorker', () => {
-  it('cria a fila de mortas e a fila, e busca em lotes com rajada e metadados', async () => {
+  const opcoesDaEntrada = {
+    ...BOT_QUEUE_OPTIONS,
+    deadLetter: JOBS.incomingMessageDead,
+  };
+
+  it('cria a fila de mortas e a fila com ordem por conversa, e busca em lotes com metadados', async () => {
     const { boss, chamadas } = bossFalso();
     await registerIncomingWorker(boss, deps);
 
-    expect(chamadas).toEqual([
+    expect(chamadas.slice(0, 2)).toEqual([
       ['createQueue', JOBS.incomingMessageDead],
-      [
-        'createQueue',
-        JOBS.incomingMessage,
-        { ...BOT_QUEUE_OPTIONS, deadLetter: JOBS.incomingMessageDead },
-      ],
-      ['work', JOBS.incomingMessage, BOT_WORK_OPTIONS],
+      ['createQueue', JOBS.incomingMessage, { ...opcoesDaEntrada, policy: INCOMING_QUEUE_POLICY }],
     ]);
+    expect(INCOMING_QUEUE_POLICY).toBe('key_strict_fifo');
+    expect(chamadas).toContainEqual(['work', JOBS.incomingMessage, BOT_WORK_OPTIONS]);
+    expect(chamadas).toContainEqual(['schedule', JOBS.unblockConversations, UNBLOCK_CRON]);
     expect(BOT_QUEUE_OPTIONS).toMatchObject({ notify: true, expireInSeconds: 60 });
     expect(BOT_WORK_OPTIONS).toMatchObject({
       burstWhenBatchFull: true,
@@ -231,16 +256,38 @@ describe('registerIncomingWorker', () => {
     expect(BOT_WORK_OPTIONS).not.toHaveProperty('groupConcurrency');
     expect(BOT_WORK_OPTIONS.batchSize).toBeGreaterThan(1);
     expect(BOT_WORK_OPTIONS.pollingIntervalSeconds).toBeLessThanOrEqual(0.5);
+    // A 2ª mensagem de uma rajada não pode esperar o polling de 30 s do modo NOTIFY.
+    expect(BOT_WORK_OPTIONS.notifyPollingIntervalSeconds).toBeLessThanOrEqual(0.5);
   });
 
-  it('fila criada antes com as opções padrão é atualizada', async () => {
-    const { boss, chamadas } = bossFalso([JOBS.incomingMessage, JOBS.incomingMessageDead]);
+  it('fila já criada com ordem por conversa só tem as opções atualizadas', async () => {
+    const { boss, chamadas } = bossFalso({
+      [JOBS.incomingMessage]: { policy: INCOMING_QUEUE_POLICY },
+      [JOBS.incomingMessageDead]: {},
+    });
     await registerIncomingWorker(boss, deps);
-    expect(chamadas[0]).toEqual([
-      'updateQueue',
-      JOBS.incomingMessage,
-      { ...BOT_QUEUE_OPTIONS, deadLetter: JOBS.incomingMessageDead },
+    expect(chamadas[0]).toEqual(['updateQueue', JOBS.incomingMessage, opcoesDaEntrada]);
+  });
+
+  it('fila antiga vazia com outra política é recriada com ordem por conversa', async () => {
+    const { boss, chamadas } = bossFalso({
+      [JOBS.incomingMessage]: { policy: 'standard' },
+      [JOBS.incomingMessageDead]: {},
+    });
+    await registerIncomingWorker(boss, deps);
+    expect(chamadas.slice(0, 2)).toEqual([
+      ['deleteQueue', JOBS.incomingMessage],
+      ['createQueue', JOBS.incomingMessage, { ...opcoesDaEntrada, policy: INCOMING_QUEUE_POLICY }],
     ]);
+  });
+
+  it('fila antiga com outra política e mensagens pendentes impede a subida', async () => {
+    const { boss, chamadas } = bossFalso({
+      [JOBS.incomingMessage]: { policy: 'standard', queuedCount: 2 },
+      [JOBS.incomingMessageDead]: {},
+    });
+    await expect(registerIncomingWorker(boss, deps)).rejects.toThrow(/jobs pendentes/);
+    expect(chamadas).not.toContainEqual(['deleteQueue', JOBS.incomingMessage]);
   });
 
   it('aplica o lote na ordem de chegada, mesmo que o pg-boss o devolva embaralhado', async () => {
@@ -281,13 +328,22 @@ describe('registerIncomingWorker', () => {
     const { boss, handler } = bossFalso();
     await registerIncomingWorker(boss, { ...deps, handlers });
 
-    const lote = [texto('oi'), texto('qualquer'), texto('oi', 'b'.repeat(64))];
-    expect(statuses(await handler(JOBS.incomingMessage)(lote))).toEqual([
-      'completed',
-      'deadletter',
-      'completed',
-    ]);
-    expect(await jobsConcluidos(db)).toHaveLength(2);
+    // Criados na ordem de chegada: o worker ordena o lote pelo createdOn.
+    const oi = texto('oi');
+    const qualquer = texto('qualquer');
+    const lote = [oi, qualquer, texto('oi', 'b'.repeat(64))];
+    const resultados = (await handler(JOBS.incomingMessage)(lote)) as {
+      status: string;
+      output?: unknown;
+    }[];
+    // Concluída e copiada para a fila de mortas: um job falhado travaria a conversa
+    // (key_strict_fifo) até alguém resolvê-lo.
+    expect(statuses(resultados)).toEqual(['completed', 'completed', 'completed']);
+    expect(resultados[1]?.output).toEqual({ descartada: true });
+    expect((await jobsConcluidos(db)).map((j) => j.id)).toContain(qualquer.id);
+    const mortas = await mortasNaFila(db);
+    expect(mortas).toHaveLength(1);
+    expect(mortas[0]?.data.job).toMatchObject({ wamidHmac: qualquer.data.wamidHmac });
   });
 
   it('job em formato antigo vai para a fila de mortas sem derrubar o lote', async () => {
@@ -302,7 +358,8 @@ describe('registerIncomingWorker', () => {
     };
     const resultados = await handler(JOBS.incomingMessage)([antigo, texto('oi')] as JobDeTeste[]);
 
-    expect(statuses(resultados)).toEqual(['deadletter', 'completed']);
+    expect(statuses(resultados)).toEqual(['completed', 'completed']);
+    expect(await mortasNaFila(db)).toHaveLength(1);
     expect(await passo()).toBe('MENU');
   });
 

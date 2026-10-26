@@ -1,7 +1,7 @@
 import { sql, type Db, type Tx } from '@lumens/db';
 import type { IncomingMessageJob } from './bot/webhook/process';
 import type { OutgoingReplies } from './bot/worker';
-import { JOBS, StaleJobError, type JobAttempt, type JobQueue } from './queue';
+import { JOBS, StaleJobError, type JobAttempt, type JobQueue, type SendOptions } from './queue';
 
 /**
  * Fila falsa para os testes. Grava na MESMA transação, em tabelas do próprio PGlite, como o
@@ -17,7 +17,11 @@ export class FakeQueue implements JobQueue {
   /** Tentativa atual de cada job, como o pg-boss guarda; ausente = a tentativa do chamador. */
   readonly tentativas = new Map<string, number>();
 
-  async send(name: string, data: object, tx: Tx) {
+  /** Chave de ordem de cada job enviado, na ordem do envio. */
+  readonly chaves: (string | undefined)[] = [];
+
+  async send(name: string, data: object, tx: Tx, options?: SendOptions) {
+    this.chaves.push(options?.chave);
     const json = JSON.stringify(data);
     await tx.execute(sql`insert into fake_job (name, data) values (${name}, ${json}::jsonb)`);
     if (this.failSend) throw new Error('fila fora do ar');
@@ -54,6 +58,10 @@ export function mensagensNaFila(db: Db): Promise<{ data: IncomingMessageJob }[]>
 
 export function respostasNaFila(db: Db): Promise<{ data: OutgoingReplies }[]> {
   return linhas(db, consultaDaFila(JOBS.outgoingReplies));
+}
+
+export function mortasNaFila(db: Db): Promise<{ data: { job: unknown; erro: unknown } }[]> {
+  return linhas(db, consultaDaFila(JOBS.incomingMessageDead));
 }
 
 export function jobsConcluidos(db: Db): Promise<{ name: string; id: string }[]> {

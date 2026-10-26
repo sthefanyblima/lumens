@@ -1,5 +1,5 @@
-import { criarDb, criarPool, sql, type Tx } from '@lumens/db';
-import { fromDrizzle, PgBoss } from 'pg-boss';
+import { criarDb, criarPool } from '@lumens/db';
+import { PgBoss } from 'pg-boss';
 import { registerCleanupJob } from './agendador/limpeza-conversas';
 import { buildApp } from './app';
 import { ConversationStore } from './bot/conversation/store';
@@ -7,7 +7,7 @@ import { logSender, registerIncomingWorker, registerReplyWorker } from './bot/wo
 import { carregarEnv, type Env } from './config/env';
 import { chavesDoEnv } from './cripto';
 import { criarLogger, resumoDoErro } from './logger';
-import { StaleJobError, type JobQueue } from './queue';
+import { filaPgBoss } from './queue';
 
 /**
  * Sem limite, um banco travado deixaria a transação de uma mensagem pendurada além dos 60 s do
@@ -67,22 +67,7 @@ async function iniciar(env: Env): Promise<void> {
     });
     await boss.start();
 
-    // O Tx é genérico no driver (PGlite nos testes), então o tipo do `execute` não sabe que
-    // devolve `{ rows }`. Aqui o driver é sempre o node-postgres, que devolve.
-    const naTransacao = (tx: Tx) => ({
-      db: fromDrizzle(tx as unknown as Parameters<typeof fromDrizzle>[0], sql),
-    });
-    const queue: JobQueue = {
-      send: (name, data, tx) => boss.send(name, data, naTransacao(tx)),
-      complete: async (name, job, tx) => {
-        // O tipo declara CommandResponse vazio, mas o pg-boss devolve `{ jobs, requested, affected }`
-        // (mapCommandResponse); com a tentativa no argumento, `affected` é 0 se ela não vale mais.
-        const resposta = (await boss.complete(name, job, null, naTransacao(tx))) as {
-          affected?: number;
-        };
-        if (resposta.affected !== 1) throw new StaleJobError();
-      },
-    };
+    const queue = filaPgBoss(boss);
     const chaves = chavesDoEnv(env);
     const store = new ConversationStore(db);
     // As filas são criadas aqui, antes do servidor aceitar o primeiro webhook.

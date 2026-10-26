@@ -223,7 +223,7 @@ async function enfileirar(
       .onConflictDoNothing()
       .returning();
     if (inserida.length === 0) return false;
-    await deps.queue.send(JOBS.incomingMessage, job, tx);
+    await deps.queue.send(JOBS.incomingMessage, job, tx, { chave: job.phoneHmac });
     return true;
   });
 

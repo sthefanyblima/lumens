@@ -83,6 +83,10 @@ export const BOT_WORK_OPTIONS = {
   batchSize: 10,
   burstWhenBatchFull: true,
   pollingIntervalSeconds: 0.5,
+  // Com NOTIFY ativo o pg-boss só faz polling a cada 30 s. Mas o NOTIFY sai quando o job é
+  // criado, e com a ordem por conversa a 2ª mensagem de uma rajada ainda está atrás da 1ª
+  // nessa hora: sem polling curto, ela esperaria até 30 s depois que a 1ª terminasse.
+  notifyPollingIntervalSeconds: 0.5,
   perJobResults: true,
   includeMetadata: true,
 } as const;
@@ -144,15 +148,55 @@ export async function processIncomingJob(
   });
 }
 
-type Boss = Pick<PgBoss, 'getQueue' | 'createQueue' | 'updateQueue' | 'work'>;
+type Boss = Pick<
+  PgBoss,
+  | 'getQueue'
+  | 'createQueue'
+  | 'updateQueue'
+  | 'deleteQueue'
+  | 'work'
+  | 'schedule'
+  | 'getBlockedKeys'
+  | 'findJobs'
+  | 'deleteJob'
+>;
 
-/** Cria a fila com as opções do bot, ou atualiza uma criada antes com outras opções. */
-async function prepareQueue(boss: Boss, name: string, deadLetter: string): Promise<void> {
+/**
+ * Política da fila de entrada. `key_strict_fifo` com a chave = `phoneHmac` (veja o `chave` no
+ * envio do webhook): o pg-boss só entrega a mensagem mais antiga de cada conversa, e só depois
+ * que a anterior terminou, mesmo com várias instâncias do servidor. Uma em `retry` (expirou com
+ * o processo caído) segura as seguintes, em vez de ser passada para trás. Ordenar o lote numa
+ * instância só (o que havia antes) não impedia outra instância de pegar as mais novas.
+ */
+export const INCOMING_QUEUE_POLICY = 'key_strict_fifo' as const;
+
+/**
+ * Cria a fila com as opções do bot, ou atualiza uma criada antes com outras opções. A política
+ * não muda depois de criada: uma fila antiga com outra política é recriada se estiver vazia; com
+ * job pendente, o servidor não sobe (apagar a fila perderia mensagens).
+ */
+async function prepareQueue(
+  boss: Boss,
+  name: string,
+  deadLetter: string,
+  policy: 'standard' | typeof INCOMING_QUEUE_POLICY = 'standard',
+): Promise<void> {
   // A fila de mortas precisa existir antes da fila que aponta para ela.
   if (!(await boss.getQueue(deadLetter))) await boss.createQueue(deadLetter);
   const options = { ...BOT_QUEUE_OPTIONS, deadLetter };
-  if (await boss.getQueue(name)) await boss.updateQueue(name, options);
-  else await boss.createQueue(name, options);
+  const atual = await boss.getQueue(name);
+  if (atual && (atual.policy ?? 'standard') !== policy) {
+    if (atual.queuedCount + atual.activeCount > 0) {
+      throw new Error(
+        `A fila ${name} tem a política ${String(atual.policy)} e jobs pendentes; esvazie-a antes de subir esta versão.`,
+      );
+    }
+    await boss.deleteQueue(name);
+  } else if (atual) {
+    await boss.updateQueue(name, options);
+    return;
+  }
+  await boss.createQueue(name, policy === 'standard' ? options : { ...options, policy });
 }
 
 const esperar = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -189,7 +233,7 @@ async function processWithRetries(
       }
       if (delay === undefined || erro instanceof InvalidTransitionError) {
         log.error({ erro: resumoDoErro(erro) }, 'mensagem descartada para a fila de mortas');
-        return { id: job.id, status: 'deadletter', output: resumoDoErro(erro) };
+        return descartar(job, erro, deps);
       }
       log.warn({ erro: resumoDoErro(erro), tentativa: tentativa + 1 }, 'mensagem falhou');
       await esperar(delay);
@@ -203,8 +247,80 @@ async function processWithRetries(
  * ser aplicadas na ordem. A exceção é um job que expira com o processo caído: ele volta pelo
  * retry do pg-boss, depois das mensagens que chegaram enquanto isso.
  */
+/**
+ * Tira a mensagem da frente da conversa: copia o job para a fila de mortas e o conclui, numa
+ * transação. Não usa o `deadletter` do pg-boss porque, numa fila `key_strict_fifo`, um job
+ * falhado segura a conversa inteira até alguém resolvê-lo — a pessoa ficaria sem resposta.
+ */
+async function descartar(
+  job: JobAttempt & { data: unknown },
+  erro: unknown,
+  deps: WorkerDeps,
+): Promise<JobResult> {
+  try {
+    await deps.db.transaction(async (tx) => {
+      await deps.queue.send(
+        JOBS.incomingMessageDead,
+        { job: job.data, erro: resumoDoErro(erro) },
+        tx,
+      );
+      await deps.queue.complete(JOBS.incomingMessage, job, tx);
+    });
+    return { id: job.id, status: 'completed', output: { descartada: true } };
+  } catch (falha) {
+    // Sem como mover agora (banco fora): fica falhado, e o desbloquearConversas resolve depois.
+    deps.logger
+      .child({ conversa: conversaDoLog(job.data) })
+      .error({ erro: resumoDoErro(falha) }, 'não deu para mover a mensagem para a fila de mortas');
+    return { id: job.id, status: 'deadletter', output: resumoDoErro(erro) };
+  }
+}
+
+/** Cria (ou atualiza) a fila de entrada, com ordem por conversa, e a de mortas dela. */
+export async function prepararFilaDeEntrada(boss: Boss): Promise<void> {
+  await prepareQueue(boss, JOBS.incomingMessage, JOBS.incomingMessageDead, INCOMING_QUEUE_POLICY);
+}
+
+/** A cada minuto: o pior caso de uma conversa travada (veja `desbloquearConversas`). */
+export const UNBLOCK_CRON = '* * * * *';
+
+/**
+ * Remove da frente das conversas os jobs que o próprio pg-boss deixou falhados: os que expiraram
+ * mais vezes que o `retryLimit` (processo caindo sempre na mesma mensagem). Numa fila
+ * `key_strict_fifo` eles seguram a conversa para sempre. O conteúdo já foi copiado para a fila de
+ * mortas pelo pg-boss (a fila tem `deadLetter`), então apagar daqui não perde nada.
+ *
+ * @returns quantos jobs foram removidos.
+ */
+export async function desbloquearConversas(
+  boss: Pick<PgBoss, 'getBlockedKeys' | 'findJobs' | 'deleteJob'>,
+  logger: Logger,
+): Promise<number> {
+  let removidos = 0;
+  for (const chave of await boss.getBlockedKeys(JOBS.incomingMessage)) {
+    const falhados = (await boss.findJobs(JOBS.incomingMessage, { key: chave })).filter(
+      (job) => job.state === 'failed',
+    );
+    if (falhados.length === 0) continue;
+    await boss.deleteJob(
+      JOBS.incomingMessage,
+      falhados.map((job) => job.id),
+    );
+    removidos += falhados.length;
+    logger
+      .child({ conversa: chave.slice(0, 12) })
+      .warn({ jobs: falhados.length }, 'conversa destravada: job falhado tirado da frente');
+  }
+  return removidos;
+}
+
 export async function registerIncomingWorker(boss: Boss, deps: WorkerDeps): Promise<void> {
-  await prepareQueue(boss, JOBS.incomingMessage, JOBS.incomingMessageDead);
+  await prepararFilaDeEntrada(boss);
+  if (!(await boss.getQueue(JOBS.unblockConversations))) {
+    await boss.createQueue(JOBS.unblockConversations);
+  }
+  await boss.schedule(JOBS.unblockConversations, UNBLOCK_CRON);
+  await boss.work(JOBS.unblockConversations, () => desbloquearConversas(boss, deps.logger));
   await boss.work<IncomingMessageJob, unknown, typeof BOT_WORK_OPTIONS>(
     JOBS.incomingMessage,
     BOT_WORK_OPTIONS,
