@@ -1,4 +1,4 @@
-import { conversationState, type Db } from '@lumens/db';
+import { conversas, type Db } from '@lumens/db';
 import { criarBancoEmMemoria } from '@lumens/db/teste';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CLEANUP_CRON, CLEANUP_TZ, registerCleanupJob } from '../../agendador/limpeza-conversas';
@@ -83,8 +83,8 @@ describe('router', () => {
 
   it('nunca guarda o número puro', async () => {
     await send('oi');
-    const rows = await db.select().from(conversationState);
-    expect(rows.map((r) => r.phoneHmac)).toEqual([H]);
+    const rows = await db.select().from(conversas);
+    expect(rows.map((r) => r.telefoneHmac)).toEqual([H]);
     expect(H).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.stringify(rows)).not.toContain(PHONE);
   });
@@ -166,8 +166,8 @@ describe('store', () => {
     await store.save('fresh', 'MENU', {});
     advance(5 * HOUR);
     expect(await store.deleteExpired(clock)).toBe(2);
-    const rows = await db.select().from(conversationState);
-    expect(rows.map((r) => r.phoneHmac)).toEqual(['fresh']);
+    const rows = await db.select().from(conversas);
+    expect(rows.map((r) => r.telefoneHmac)).toEqual(['fresh']);
     expect(await store.deleteExpired(clock)).toBe(0);
   });
 

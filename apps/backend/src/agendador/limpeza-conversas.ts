@@ -10,9 +10,9 @@ export const CLEANUP_TZ = 'America/Maceio';
 type Boss = Pick<PgBoss, 'getQueue' | 'createQueue' | 'schedule' | 'work'>;
 
 export interface CleanupResult {
-  /** Conversas expiradas (conversation_state). */
+  /** Conversas expiradas (conversa). */
   deleted: number;
-  /** Dedup de webhook fora da janela de reenvio da Meta (processed_message). */
+  /** Dedup de webhook fora da janela de reenvio da Meta (mensagem_processada). */
   dedupDeleted: number;
 }
 

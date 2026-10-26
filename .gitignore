@@ -4,6 +4,7 @@ node_modules/
 # Builds
 dist/
 .next/
+next-env.d.ts
 out/
 *.tsbuildinfo
 
@@ -27,3 +28,4 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
+.vercel

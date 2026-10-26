@@ -1,9 +1,26 @@
-import { stepEnum } from '@lumens/db';
+/** Todos os passos da conversa. No banco, `conversa.passo` é texto: a lista vale aqui. */
+export const STEPS = [
+  'GREETING',
+  'MENU',
+  'VERIFY_ASK_EMAIL',
+  'VERIFY_ASK_CODE',
+  'VERIFY_ASK_COURSE',
+  'REPORT_ASK_TEXT',
+  'REPORT_ASK_BLOCK',
+  'REPORT_PICK_SIMILAR',
+  'NEW_ASK_TITLE',
+  'NEW_ASK_PLACE',
+  'NEW_ASK_DESCRIPTION',
+  'NEW_ASK_PHOTO',
+] as const;
 
-/** Passo da conversa: espelha o enum `conversation_step` do banco. */
-export type Step = (typeof stepEnum.enumValues)[number];
+export type Step = (typeof STEPS)[number];
 
-/** "Enum" de passos (objeto const), checado contra stepEnum em tempo de compilação. */
+export function isStep(valor: string): valor is Step {
+  return (STEPS as readonly string[]).includes(valor);
+}
+
+/** "Enum" de passos (objeto const), checado contra STEPS em tempo de compilação. */
 export const Step = {
   GREETING: 'GREETING',
   MENU: 'MENU',
@@ -18,8 +35,6 @@ export const Step = {
   NEW_ASK_DESCRIPTION: 'NEW_ASK_DESCRIPTION',
   NEW_ASK_PHOTO: 'NEW_ASK_PHOTO',
 } as const satisfies { [K in Step]: K };
-
-export const STEPS: readonly Step[] = stepEnum.enumValues;
 
 /** Próximos passos permitidos a partir de cada passo (fora os globais). */
 export const TRANSITIONS: Record<Step, readonly Step[]> = {

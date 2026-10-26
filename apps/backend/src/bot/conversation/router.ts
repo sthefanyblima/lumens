@@ -27,6 +27,7 @@ export async function handleIncoming(
   const { store } = deps;
   const handlers = deps.handlers ?? defaultHandlers;
   const { phoneHmac } = msg;
+  await store.lock(phoneHmac);
   const current = await store.get(phoneHmac);
 
   const cmd = parseGlobalCommand(msg.text);

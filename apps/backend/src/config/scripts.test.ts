@@ -31,7 +31,7 @@ describe('scripts do back-end', () => {
   // sobe o servidor e o que roda as migrações precisam estar em `dependencies`.
   it.each([
     ['@lumens/backend', backend, 'start'],
-    ['@lumens/db', db, 'migrate'],
+    ['@lumens/db', db, 'db:migrate'],
   ])('%s %s roda sem devDependencies', (_, pacote, script) => {
     const comando = pacote.scripts[script];
     expect(comando).toBeDefined();

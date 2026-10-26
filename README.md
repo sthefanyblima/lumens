@@ -65,7 +65,8 @@ Comandos úteis:
 
 Para rodar um comando em um pacote só: `pnpm --filter @lumens/dominio test`.
 
-CI (T3) e documentação completa (T21) entram nas próximas tasks.
+O CI executa tipos, lint, formatação, migração em base vazia e testes, incluindo integração
+com PostgreSQL. A documentação completa de operação entra na T21.
 
 ## Banco local
 
@@ -76,12 +77,11 @@ cp .env.example .env   # só na primeira vez
 pnpm db:up
 ```
 
-| Comando           | O que faz                                                |
-| ----------------- | -------------------------------------------------------- |
-| `pnpm db:up`      | Sobe o PostgreSQL e só retorna quando ele aceita conexão |
-| `pnpm db:down`    | Derruba o container, preservando os dados                |
-| `pnpm db:reset`   | Apaga o volume e sobe do zero (recria o `lumens_test`)   |
-| `pnpm db:migrate` | Aplica as migrações de `packages/db/migracoes/`          |
+| Comando         | O que faz                                                |
+| --------------- | -------------------------------------------------------- |
+| `pnpm db:up`    | Sobe o PostgreSQL e só retorna quando ele aceita conexão |
+| `pnpm db:down`  | Derruba o container, preservando os dados                |
+| `pnpm db:reset` | Apaga o volume e sobe do zero (recria o `lumens_test`)   |
 
 Conferir que o banco respondeu:
 
@@ -92,6 +92,23 @@ docker compose exec postgres psql -U lumens -d lumens -c 'select 1'
 São dois bancos no mesmo container: `lumens`, para desenvolvimento, e `lumens_test`, para os
 testes de integração — criado pelos scripts de `docker/init/`, que rodam uma única vez, na
 criação do volume. Se editar algum deles, use `pnpm db:reset`.
+
+### Esquema e migrações
+
+```bash
+pnpm db:migrate   # aplica as migrações pendentes em DATABASE_URL; não reseta dados
+pnpm db:generate  # após alterar o schema Drizzle, gera SQL para revisão/versionamento
+```
+
+O [contrato do banco](docs/database/schema.md) contém o diagrama ER, campos, status e decisões
+da primeira versão. O esquema e os tipos de leitura/inserção são exportados por `@lumens/db`.
+As migrações SQL e os metadados do Drizzle ficam em `packages/db/migrations/`.
+
+`pnpm check` agora exige o Postgres local. A suíte usa `DATABASE_URL_TESTE` do `.env` ou do
+ambiente (nome terminado em `_test`) e usuário com `CREATEDB`; cria e remove uma base temporária
+por execução, sem apagar dados de `lumens` ou `lumens_test`. O usuário do Docker já permite isso.
+Não use credenciais de produção nos testes. Seed/`db:fresh` entram na T6; a proteção append-only
+de evento entra na T5.
 
 A versão do PostgreSQL é fixada no `docker-compose.yml` e precisa acompanhar a do banco de
 homologação, que será definida na T20.
@@ -117,17 +134,19 @@ pnpm --filter @lumens/backend env:check
 
 Ele lista de uma vez todas as variáveis que faltam, ou confirma que o ambiente está válido.
 
-### Esquema e migrações
-
-O esquema fica em `packages/db/src/schema.ts` (Drizzle). Depois de mudar o esquema, gere a
-migração e aplique:
+## Site
 
 ```bash
-pnpm --filter @lumens/db generate   # cria o SQL em packages/db/migracoes/
-pnpm db:migrate
+pnpm --filter @lumens/site dev     # http://localhost:3000
+pnpm --filter @lumens/site build   # build de produção
 ```
 
-Nunca edite à mão um SQL que já foi aplicado: gere uma migração nova.
+Homologação: **https://lumens-five.vercel.app**. Até o ambiente da AWS (1.1b), o site é
+publicado na Vercel manualmente, a partir da `main` atualizada:
+
+```bash
+pnpm dlx vercel --prod
+```
 
 ## Bot (parte 2)
 

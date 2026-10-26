@@ -9,19 +9,19 @@
     "./teste": "./src/teste.ts"
   },
   "scripts": {
-    "generate": "drizzle-kit generate",
-    "migrate": "tsx --env-file-if-exists=../../.env src/cli/migrar.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "node --env-file-if-exists=../../.env ../../node_modules/vitest/vitest.mjs run",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx --env-file-if-exists=../../.env src/migrate.ts"
   },
   "dependencies": {
-    "drizzle-orm": "^0.45.4",
-    "pg": "^8.23.1",
-    "tsx": "^4.23.15"
+    "drizzle-orm": "0.45.4",
+    "pg": "8.23.1",
+    "tsx": "4.23.15"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.11",
-    "@types/pg": "^8.23.1",
-    "drizzle-kit": "^0.31.11"
+    "@types/pg": "^8.15.5",
+    "drizzle-kit": "0.31.11"
   }
 }

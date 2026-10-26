@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { processedMessages, type Db } from '@lumens/db';
+import { mensagensProcessadas, type Db } from '@lumens/db';
 import { criarBancoEmMemoria } from '@lumens/db/teste';
 import type { FastifyInstance } from 'fastify';
 import { pino } from 'pino';
@@ -77,7 +77,7 @@ describe('webhook da Meta', () => {
     if (sig !== null) headers['x-hub-signature-256'] = sig;
     return app.inject({ method: 'POST', url: '/webhook', payload: body, headers });
   };
-  const dedup = () => db.select().from(processedMessages);
+  const dedup = () => db.select().from(mensagensProcessadas);
 
   it('GET /webhook com token correto devolve o challenge', async () => {
     const res = await app.inject({
@@ -304,9 +304,9 @@ describe('webhook da Meta', () => {
 
   it('deleteOldDedup apaga só o que passou da janela de reenvio da Meta', async () => {
     const agora = new Date('2026-10-22T12:00:00Z');
-    await db.insert(processedMessages).values([
-      { wamidHmac: 'velho', receivedAt: new Date(agora.getTime() - DEDUP_TTL_MS - 1) },
-      { wamidHmac: 'recente', receivedAt: new Date(agora.getTime() - DEDUP_TTL_MS + 60_000) },
+    await db.insert(mensagensProcessadas).values([
+      { wamidHmac: 'velho', recebidaEm: new Date(agora.getTime() - DEDUP_TTL_MS - 1) },
+      { wamidHmac: 'recente', recebidaEm: new Date(agora.getTime() - DEDUP_TTL_MS + 60_000) },
     ]);
     expect(await deleteOldDedup(db, agora)).toBe(1);
     expect((await dedup()).map((linha) => linha.wamidHmac)).toEqual(['recente']);

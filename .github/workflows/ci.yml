@@ -73,14 +73,22 @@ jobs:
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         run: pnpm format:check
 
-      # Service container não monta docker/init/, então o banco de teste é criado aqui.
-      # Enquanto a T4 não unificar, esta linha e docker/init/ precisam concordar —
-      # na T4, executar o próprio .sql aqui (psql -f) para ter uma fonte só.
+      - name: Build do site
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
+        run: pnpm --filter @lumens/site build
+
+      # Mesma fonte usada pelo Docker local.
       - name: Criar o banco de teste
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         env:
           DATABASE_URL: postgresql://lumens:lumens_ci@localhost:5432/lumens
-        run: psql "$DATABASE_URL" -c 'CREATE DATABASE lumens_test'
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f docker/init/01-cria-banco-de-teste.sql
+
+      - name: Aplicar migrações do zero
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
+        env:
+          DATABASE_URL: postgresql://lumens:lumens_ci@localhost:5432/lumens
+        run: pnpm db:migrate
 
       # As variáveis de banco ficam NESTE step, não no nível do job: o Node dá
       # precedência ao ambiente do processo sobre o --env-file, então defini-las no

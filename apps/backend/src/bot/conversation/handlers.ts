@@ -62,14 +62,17 @@ const menu: StepHandler = ({ input }) => {
   return { next: opt.next, replies: [opt.reply] };
 };
 
-/** Placeholder: ecoa a entrada e avança para o primeiro próximo passo permitido. */
+/**
+ * Placeholder: avança para o primeiro próximo passo permitido. Não ecoa a entrada: a resposta
+ * vai para a fila e para o log, e a entrada pode ser o e-mail ou o relato da pessoa.
+ */
 function placeholder(step: Step, story: string): StepHandler {
   // TODO(story): substituir pelo handler real.
   const next = TRANSITIONS[step][0];
   if (!next) throw new Error(`${step} não tem próximo passo em TRANSITIONS`);
-  return ({ input }) => ({
+  return () => ({
     next,
-    replies: [`[${step} — em construção, história ${story}] Recebi: ${input.text}`],
+    replies: [`[${step} — em construção, história ${story}] Recebi sua mensagem.`],
   });
 }
 

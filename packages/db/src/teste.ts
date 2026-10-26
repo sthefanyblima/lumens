@@ -1,9 +1,11 @@
+import { fileURLToPath } from 'node:url';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
-import type { Db } from './cliente';
-import { PASTA_MIGRACOES } from './migrar';
+import type { Db } from './client';
 import * as schema from './schema';
+
+const PASTA_MIGRACOES = fileURLToPath(new URL('../migrations', import.meta.url));
 
 /**
  * Postgres em memória (PGlite) com as MESMAS migrações do banco real. Para testes que

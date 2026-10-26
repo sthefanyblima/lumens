@@ -1,4 +1,4 @@
-import { lt, processedMessages, type Db } from '@lumens/db';
+import { lt, mensagensProcessadas, type Db } from '@lumens/db';
 import { z } from 'zod';
 import { cifrar, hmacHex, type Chaves } from '../../cripto';
 import type { Logger } from '../../logger';
@@ -95,7 +95,7 @@ export type ConteudoMensagem = z.infer<typeof conteudoSchema>;
 export interface IncomingMessageJob {
   wamidHmac: string;
   wamidCifrado: string;
-  /** Mesmo hash do `hashPhone`: a chave da conversa em conversation_state. */
+  /** Mesmo hash do `hashPhone`: a chave da conversa na tabela conversa. */
   phoneHmac: string;
   phoneCifrado: string;
   phoneNumberId: string;
@@ -192,12 +192,12 @@ async function enfileirar(
 
   const nova = await deps.db.transaction(async (tx) => {
     const inserida = await tx
-      .insert(processedMessages)
+      .insert(mensagensProcessadas)
       .values({ wamidHmac })
       .onConflictDoNothing()
       .returning();
     if (inserida.length === 0) return false;
-    await deps.queue.send(JOBS.incomingMessage, job, tx);
+    await deps.queue.send(JOBS.incomingMessage, job, tx, { group: job.phoneHmac });
     return true;
   });
 
@@ -211,8 +211,8 @@ async function enfileirar(
 /** Apaga o dedup mais velho que a janela de reenvio da Meta; retorna quantos removeu. */
 export async function deleteOldDedup(db: Db, now: Date = new Date()): Promise<number> {
   const rows = await db
-    .delete(processedMessages)
-    .where(lt(processedMessages.receivedAt, new Date(now.getTime() - DEDUP_TTL_MS)))
-    .returning({ wamidHmac: processedMessages.wamidHmac });
+    .delete(mensagensProcessadas)
+    .where(lt(mensagensProcessadas.recebidaEm, new Date(now.getTime() - DEDUP_TTL_MS)))
+    .returning({ wamidHmac: mensagensProcessadas.wamidHmac });
   return rows.length;
 }

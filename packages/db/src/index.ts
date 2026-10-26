@@ -1,14 +1,8 @@
-/**
- * @lumens/db
- *
- * Esquema (Drizzle), migrações, views públicas e seed.
- * Implementação: T2 (Postgres local), T4 (esquema), T5 (trigger), T6 (seed), T14 (views).
- */
 export const PACOTE_DB = '@lumens/db' as const;
 
 export * from './schema';
-export { criarDb, criarPool, type Db, type Tx } from './cliente';
-export { migrar, PASTA_MIGRACOES } from './migrar';
+export { criarCliente, criarDb, criarPool, type Db, type Tx } from './client';
+export type * from './types';
 
 // Operadores do Drizzle reexportados daqui para que os outros pacotes não dependam do
 // drizzle-orm direto: com o pnpm, duas instâncias dele (resolvidas com peers diferentes)

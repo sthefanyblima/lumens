@@ -31,6 +31,13 @@ describe('cripto', () => {
     expect(() => decifrar(bytes.toString('base64'), CHAVE)).toThrow();
   });
 
+  it('decifrar recusa tag truncada', () => {
+    const bytes = Buffer.from(cifrar('', CHAVE), 'base64');
+    // Sem texto cifrado: os bytes são iv | tag. Cortar a tag não pode virar tag curta aceita.
+    expect(() => decifrar(bytes.subarray(0, 12 + 4).toString('base64'), CHAVE)).toThrow();
+    expect(() => decifrar(bytes.subarray(0, 12 + 15).toString('base64'), CHAVE)).toThrow();
+  });
+
   it('hmacHex é determinístico e depende da chave', () => {
     expect(hmacHex('x', CHAVE)).toBe(hmacHex('x', CHAVE));
     expect(hmacHex('x', CHAVE)).not.toBe(hmacHex('x', OUTRA));

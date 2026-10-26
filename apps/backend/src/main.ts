@@ -54,7 +54,11 @@ async function iniciar(env: Env): Promise<void> {
       db: fromDrizzle(tx as unknown as Parameters<typeof fromDrizzle>[0], sql),
     });
     const queue: JobQueue = {
-      send: (name, data, tx) => boss.send(name, data, naTransacao(tx)),
+      send: (name, data, tx, options) =>
+        boss.send(name, data, {
+          ...naTransacao(tx),
+          ...(options?.group ? { group: { id: options.group } } : {}),
+        }),
       complete: async (name, id, tx) => {
         await boss.complete(name, id, null, naTransacao(tx));
       },
@@ -62,8 +66,8 @@ async function iniciar(env: Env): Promise<void> {
     const store = new ConversationStore(db);
     // As filas são criadas aqui, antes do servidor aceitar o primeiro webhook.
     await registerCleanupJob(boss, { store, db });
-    await registerIncomingWorker(boss, { db, store, queue });
-    await registerReplyWorker(boss, logSender(logger));
+    await registerIncomingWorker(boss, { db, store, queue, logger });
+    await registerReplyWorker(boss, logSender(logger), logger);
 
     const app = await buildApp({
       config: { verifyToken: env.META_VERIFY_TOKEN, appSecret: env.META_APP_SECRET },

@@ -3,5 +3,4 @@ dist
 .next
 coverage
 pnpm-lock.yaml
-# Gerado pelo drizzle-kit
-packages/db/migracoes
+next-env.d.ts

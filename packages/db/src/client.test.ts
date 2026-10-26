@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { criarPool } from './cliente';
+import { criarPool } from './client';
 
 describe('criarPool', () => {
   it("não derruba o processo quando o pool emite 'error' (conexão ociosa caiu)", async () => {
