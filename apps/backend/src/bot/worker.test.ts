@@ -397,4 +397,18 @@ describe('logSender', () => {
     expect(logs[0]).not.toContain('meu.email@ufal.br');
     expect(JSON.parse(logs[0] ?? '{}')).toMatchObject({ respostas: 1 });
   });
+
+  it('no modo dev mostra o texto, para testar a conversa pelo simulador', async () => {
+    const logs: string[] = [];
+    const logger = pino({ level: 'info' }, { write: (linha: string) => logs.push(linha) });
+    const mensagem: OutgoingReplies = {
+      phoneHmac: PHONE_HMAC,
+      phoneCifrado: 'c',
+      phoneNumberId: 'P',
+      wamidHmac: 'w',
+      repliesCifradas: cifrar(JSON.stringify([GREETING_TEXT, MENU_TEXT]), chaves.cifra),
+    };
+    await logSender(logger, chaves, { mostrarTexto: true }).send(mensagem);
+    expect(JSON.parse(logs[0] ?? '{}')).toMatchObject({ texto: [GREETING_TEXT, MENU_TEXT] });
+  });
 });

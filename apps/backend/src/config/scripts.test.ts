@@ -23,6 +23,11 @@ describe('scripts do back-end', () => {
     expect(backend.scripts[script]).toContain('--env-file-if-exists=../../.env');
   });
 
+  it('o texto das respostas no log (--dev) é só do dev, nunca do start de produção', () => {
+    expect(backend.scripts.dev).toContain('--dev');
+    expect(backend.scripts.start).not.toContain('--dev');
+  });
+
   it('env:check é o dev, só que parando depois de validar o ambiente', () => {
     expect(backend.scripts['env:check']).toBe(`${String(backend.scripts.dev)} --so-validar`);
   });

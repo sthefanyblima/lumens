@@ -168,7 +168,9 @@ para o worker responder.
 Um worker consome a fila `incoming-message` e anda a conversa. O novo estado, as respostas (na
 fila `outgoing-replies`) e a conclusão do job entram na mesma transação: se o processo cair no
 meio, a mensagem é reentregue em até 1 minuto e aplicada uma vez só. Enquanto o envio pela Meta
-não existe, as respostas aparecem no log do `pnpm dev` como `respostas do bot`.
+não existe, as respostas aparecem no log do `pnpm dev` como `respostas do bot`, com o texto no
+campo `texto`. Só o `pnpm dev` (flag `--dev`) mostra o texto; o `start` de produção registra
+apenas quantas respostas saíram, porque uma resposta pode repetir o que a pessoa escreveu.
 
 Em produção não há `.env` nem devDependencies: o ambiente vem da hospedagem e o servidor sobe
 com `pnpm --filter @lumens/backend start` (migrações: `pnpm db:migrate`).

@@ -8,8 +8,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "dev": "tsx --env-file-if-exists=../../.env src/main.ts",
-    "env:check": "tsx --env-file-if-exists=../../.env src/main.ts --so-validar",
+    "dev": "tsx --env-file-if-exists=../../.env src/main.ts --dev",
+    "env:check": "tsx --env-file-if-exists=../../.env src/main.ts --dev --so-validar",
     "start": "tsx src/main.ts",
     "sim": "tsx --env-file-if-exists=../../.env scripts/sim.ts",
     "fixtures": "tsx scripts/gerar-fixtures.ts",

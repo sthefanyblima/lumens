@@ -250,10 +250,17 @@ export async function registerReplyWorker(
 
 /**
  * Sender provisório: só registra que houve resposta. O envio pela API da Meta ainda não existe;
- * até lá é assim que se vê a conversa andando (`pnpm dev` + `pnpm sim`). Sem o texto das
- * respostas: ele pode repetir o que a pessoa escreveu, e o log não guarda dado pessoal.
+ * até lá é assim que se vê a conversa andando (`pnpm dev` + `pnpm sim`).
+ *
+ * O texto das respostas só entra com `mostrarTexto`, que o main liga apenas com `--dev` (o
+ * script `dev`; o `start` de produção não passa a flag). Fora disso, não: uma resposta pode
+ * repetir o que a pessoa escreveu, e o log de produção não guarda dado pessoal.
  */
-export function logSender(logger: Logger, chaves: Chaves): ReplySender {
+export function logSender(
+  logger: Logger,
+  chaves: Chaves,
+  opcoes: { mostrarTexto: boolean } = { mostrarTexto: false },
+): ReplySender {
   return {
     send: (message) => {
       const replies = respostasDoJob(message, chaves);
@@ -262,6 +269,8 @@ export function logSender(logger: Logger, chaves: Chaves): ReplySender {
           conversa: conversaDoLog(message),
           respostas: replies.length,
           caracteres: replies.reduce((total, r) => total + r.length, 0),
+          // Só no `pnpm dev`: é o que deixa testar a conversa pelo simulador sem celular.
+          ...(opcoes.mostrarTexto ? { texto: replies } : {}),
         },
         'respostas do bot (envio pela Meta ainda não implementado)',
       );

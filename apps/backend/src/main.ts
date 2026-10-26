@@ -32,6 +32,13 @@ try {
   process.exit(1);
 }
 
+/**
+ * `--dev` só vem do script `dev` (e do `env:check`, que é o `dev` validando). O `start` de
+ * produção não passa a flag, e o scripts.test trava isso: o que é só para a máquina do dev
+ * depende do comando, não de uma variável de ambiente que pode ser copiada para a hospedagem.
+ */
+const MODO_DEV = process.argv.includes('--dev');
+
 if (process.argv.includes('--so-validar')) {
   console.log(`Ambiente validado. Banco: ${new URL(env.DATABASE_URL).host}`);
 } else {
@@ -81,7 +88,7 @@ async function iniciar(env: Env): Promise<void> {
     // As filas são criadas aqui, antes do servidor aceitar o primeiro webhook.
     await registerCleanupJob(boss, { store, db });
     await registerIncomingWorker(boss, { db, store, queue, logger, chaves });
-    await registerReplyWorker(boss, logSender(logger, chaves), logger);
+    await registerReplyWorker(boss, logSender(logger, chaves, { mostrarTexto: MODO_DEV }), logger);
 
     const app = await buildApp({
       config: { verifyToken: env.META_VERIFY_TOKEN, appSecret: env.META_APP_SECRET },
