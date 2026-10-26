@@ -65,7 +65,8 @@ Comandos úteis:
 
 Para rodar um comando em um pacote só: `pnpm --filter @lumens/dominio test`.
 
-CI (T3) e documentação completa (T21) entram nas próximas tasks.
+O CI executa tipos, lint, formatação, migração em base vazia e testes, incluindo integração
+com PostgreSQL. A documentação completa de operação entra na T21.
 
 ## Banco local
 
@@ -91,6 +92,23 @@ docker compose exec postgres psql -U lumens -d lumens -c 'select 1'
 São dois bancos no mesmo container: `lumens`, para desenvolvimento, e `lumens_test`, para os
 testes de integração — criado pelos scripts de `docker/init/`, que rodam uma única vez, na
 criação do volume. Se editar algum deles, use `pnpm db:reset`.
+
+### Esquema e migrações
+
+```bash
+pnpm db:migrate   # aplica as migrações pendentes em DATABASE_URL; não reseta dados
+pnpm db:generate  # após alterar o schema Drizzle, gera SQL para revisão/versionamento
+```
+
+O [contrato do banco](docs/database/schema.md) contém o diagrama ER, campos, status e decisões
+da primeira versão. O esquema e os tipos de leitura/inserção são exportados por `@lumens/db`.
+As migrações SQL e os metadados do Drizzle ficam em `packages/db/migrations/`.
+
+`pnpm check` agora exige o Postgres local. A suíte usa `DATABASE_URL_TESTE` do `.env` ou do
+ambiente (nome terminado em `_test`) e usuário com `CREATEDB`; cria e remove uma base temporária
+por execução, sem apagar dados de `lumens` ou `lumens_test`. O usuário do Docker já permite isso.
+Não use credenciais de produção nos testes. Seed/`db:fresh` entram na T6; a proteção append-only
+de evento entra na T5.
 
 A versão do PostgreSQL é fixada no `docker-compose.yml` e precisa acompanhar a do banco de
 homologação, que será definida na T20.
