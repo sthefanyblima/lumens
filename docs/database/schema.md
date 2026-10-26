@@ -77,6 +77,11 @@ da cifra. Os campos sem tipo indicado são `text`, exceto FKs UUID e enums lista
 A chave de `papel_pauta` inclui `desde` para preservar mandatos históricos. O limite de três
 responsáveis ativos pertence ao domínio; a migração não o implementa.
 
+`papel_pauta.desde` é exportado como string pelo Drizzle para preservar os microssegundos do
+PostgreSQL. Reutilize esse valor sem convertê-lo para `Date` ao consultar ou atualizar pela PK:
+`Date` conserva apenas milissegundos e uma chave truncada pode não encontrar o registro.
+Essa escolha não altera a coluna SQL nem exige migração ou arredondamento dos dados existentes.
+
 Não há colunas `telefone` ou `email` em texto puro, inclusive para curador (decisão da dev).
 O banco não verifica se o chamador realmente cifrou o valor ou se o JSONB contém dados pessoais:
 os contratos de cifra, validação de payloads e acesso do site ainda precisam ser implementados.

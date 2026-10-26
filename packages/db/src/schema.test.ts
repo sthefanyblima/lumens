@@ -4,7 +4,10 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { Pool } from 'pg';
+import { and, eq } from 'drizzle-orm';
+import { drizzle } from 'drizzle-orm/node-postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { papeisPauta } from './schema';
 
 const executar = promisify(execFile);
 const nomeBanco = `lumens_test_scrum77_${randomUUID().replaceAll('-', '')}`;
@@ -272,6 +275,48 @@ describe('migração inicial em Postgres real', () => {
       pool.query('INSERT INTO mensagem_processada (wamid) VALUES ($1)', [wamid]),
     ).rejects.toMatchObject({ code: '23505', constraint: 'mensagem_processada_pkey' });
   });
+
+  it.each(['default now()', 'microssegundos explícitos'])(
+    'consulta e encerra um papel pela PK retornada com %s',
+    async (origem) => {
+      const pautaId = await pauta();
+      const estudanteId = await estudante();
+      if (origem === 'default now()') {
+        await pool.query(
+          `INSERT INTO papel_pauta (pauta_id, estudante_id, papel) VALUES ($1, $2, 'owner')`,
+          [pautaId, estudanteId],
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO papel_pauta (pauta_id, estudante_id, papel, desde)
+           VALUES ($1, $2, 'owner', $3)`,
+          [pautaId, estudanteId, '2026-10-26T12:00:00.123456Z'],
+        );
+      }
+
+      const db = drizzle(pool);
+      const [registro] = await db
+        .select()
+        .from(papeisPauta)
+        .where(and(eq(papeisPauta.pautaId, pautaId), eq(papeisPauta.estudanteId, estudanteId)));
+      if (!registro) throw new Error('Papel inserido não foi encontrado.');
+      const chave = and(
+        eq(papeisPauta.pautaId, registro.pautaId),
+        eq(papeisPauta.estudanteId, registro.estudanteId),
+        eq(papeisPauta.desde, registro.desde),
+      );
+      expect(await db.select().from(papeisPauta).where(chave)).toHaveLength(1);
+
+      const encerradoEm = new Date('2026-10-27T12:00:00.000Z');
+      const atualizados = await db
+        .update(papeisPauta)
+        .set({ ate: encerradoEm })
+        .where(chave)
+        .returning({ ate: papeisPauta.ate });
+      expect(atualizados).toHaveLength(1);
+      expect(atualizados[0]?.ate).toEqual(encerradoEm);
+    },
+  );
 
   it('garante uma promessa ativa por pauta e libera outra ao preencher resultado', async () => {
     const pautaId = await pauta();

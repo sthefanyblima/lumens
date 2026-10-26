@@ -68,6 +68,7 @@ Esboço inline; não foi solicitado o fluxo separado de autoria detalhada de tes
 ## Desvios aprovados
 
 - Processo local: a dev determinou que Tour é opcional e qualquer configuração deve ficar só na sua máquina. Não executar tour init/upgrade no repositório; rascunhos desta sessão ficam fora do checkout. A documentação da entrega é versionável independentemente do Tour.
+- Correção pós-review autorizada pela dev em 2026-10-26: mapear somente `papel_pauta.desde` como string no Drizzle para preservar a precisão da PK. O SQL e os dados permanecem intactos; regressões cobrem leitura, consulta e atualização pela chave retornada, com default now() e microssegundos explícitos.
 
 ## Riscos e decisões
 

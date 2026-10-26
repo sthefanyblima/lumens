@@ -32,12 +32,12 @@ detalha o ER, nulabilidade, defaults e pontos para validação da equipe.
 - [x] CI configurado para criar banco de teste pela mesma fonte do Docker e migrar base vazia.
 - [x] Testes independentes da base de desenvolvimento, com banco temporário e journal próprios.
 - [x] Revisão independente dos testes; ajuste de alinhamento do script público incorporado.
-- [x] Verificação final após os ajustes: tipos, lint, formatação e 49 testes passaram.
+- [x] Verificação final após a correção de precisão: tipos, lint, formatação e 51 testes passaram.
 - [x] Revisão independente geral concluída e aprovada; diagnóstico seguro incorporado.
-- [ ] CI remoto verde: ainda não executado; nenhuma PR/push realizado nesta sessão.
+- [x] CI remoto da implementação e do merge aprovado no commit `d5718ef`.
 
 Baseline antes da mudança: `pnpm check`, 28 testes. Verificação final da entrega: `pnpm check`
-passou, com 20 testes de banco, 12 de domínio e 17 de backend (49 no total). Não há testes
+passou, com 22 testes de banco, 12 de domínio e 17 de backend (51 no total). Não há testes
 do site nesta versão. A suíte de banco instalou e reaplicou as migrações em PostgreSQL 17 real.
 
 O diagnóstico do runner foi validado com uma conexão deliberadamente inválida: saída com
@@ -46,9 +46,23 @@ foram independentes, por leitura; os comandos acima foram executados pelo agente
 Os dois achados de atenção foram corrigidos e reavaliados: alinhamento do script público e
 preservação de código diagnóstico seguro.
 
-Estado final: implementação e revisão local concluídas; alterações ainda sem commit/push.
-O artefato SDD está no checkout para entrar no mesmo commit da feature, sem ZIP e sem
-configuração obrigatória do Tour.
+## Correção da precisão da chave de papel
+
+A revisão completa após o merge encontrou perda de precisão em `papel_pauta.desde`: o
+PostgreSQL armazenava microssegundos, mas o Drizzle retornava `Date` limitado a milissegundos.
+Consultar pela PK retornada não encontrava o registro, inclusive usando o default now().
+
+O mapeamento desse campo foi alterado para string, preservando o valor SQL e as chaves já
+armazenadas. `pnpm db:generate` confirmou que não há alteração física de esquema ou migração
+nova. A documentação do contrato e a checagem de tipos do domínio registram essa escolha.
+
+Duas regressões verificam consulta e encerramento pela PK completa após leitura pelo ORM:
+uma com default now() e outra com microssegundos explícitos. Ambas falharam antes da correção
+e passaram depois. Os testes usam a mesma base temporária isolada da suíte.
+
+Estado da entrega: implementação publicada na PR e correção pós-review validada localmente.
+O resultado do CI para cada atualização deve ser consultado no GitHub. A SDD acompanha os
+commits da feature, sem ZIP e sem configuração obrigatória do Tour.
 
 ## Pendências reais
 

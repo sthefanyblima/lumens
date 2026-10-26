@@ -108,7 +108,8 @@ export const papeisPauta = pgTable(
       .notNull()
       .references(() => estudantes.id, { onDelete: 'restrict' }),
     papel: papelNaPauta('papel').notNull(),
-    desde: instante('desde').notNull().defaultNow(),
+    // Integra a PK: preservar os microssegundos que Date não representa.
+    desde: timestamp('desde', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
     ate: instante('ate'),
     ultimaAtividadeEm: instante('ultima_atividade_em').notNull().defaultNow(),
   },
