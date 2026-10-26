@@ -1,0 +1,41 @@
+/* Tokens do protótipo (Lumens Pautas). */
+:root {
+  --fundo: #e7e1f2;
+  --superficie: #fff;
+  --tinta: #1e1433;
+  --tinta-2: #5b4e75;
+  --borda: #d9d0ea;
+  --primaria: #7b3fe4;
+  --primaria-forte: #5a22c8;
+  --trilho: #ede7f7;
+
+  --raio: 16px;
+  --espaco: 16px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--tinta);
+  font-family: var(--fonte-corpo), system-ui, sans-serif;
+}
+
+a {
+  color: var(--primaria-forte);
+}
+
+:focus-visible {
+  outline: 3px solid var(--primaria);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
