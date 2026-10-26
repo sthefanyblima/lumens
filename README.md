@@ -141,12 +141,12 @@ pnpm --filter @lumens/site dev     # http://localhost:3000
 pnpm --filter @lumens/site build   # build de produção
 ```
 
-Homologação: **https://lumens-five.vercel.app**. Até o ambiente da AWS (1.1b), o site é
-publicado na Vercel manualmente, a partir da `main` atualizada:
+Homologação: [lumens-hazel.vercel.app](https://lumens-hazel.vercel.app).
 
-```bash
-pnpm dlx vercel --prod
-```
+Até o ambiente da AWS (1.1b), o site é publicado na Vercel pela integração com o GitHub.
+O projeto `lumens` está conectado ao repositório `sthefanyblima/lumens`, com `apps/site` como
+diretório do site. Cada merge na `main` dispara um novo build; quando ele termina com sucesso,
+o site é atualizado automaticamente. O status e os logs do deploy ficam no painel da Vercel.
 
 ## Como contribuir
 
