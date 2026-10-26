@@ -249,6 +249,18 @@ describe('registerIncomingWorker', () => {
     expect(resultados.map((r) => r.status)).toEqual(['completed', 'deadletter', 'completed']);
     expect(await jobsConcluidos(db)).toHaveLength(2);
   });
+
+  it('job em formato antigo vai para a fila de mortas sem derrubar o lote', async () => {
+    const { boss, handler } = bossFalso();
+    await registerIncomingWorker(boss, deps);
+
+    const antigo = { id: 'antigo', data: { from: '5582999990000', text: 'oi' } };
+    const lote = [antigo, texto('oi')];
+    const resultados = (await handler(JOBS.incomingMessage)(lote)) as { status: string }[];
+
+    expect(resultados.map((r) => r.status)).toEqual(['deadletter', 'completed']);
+    expect(await passo()).toBe('MENU');
+  });
 });
 
 describe('registerReplyWorker', () => {

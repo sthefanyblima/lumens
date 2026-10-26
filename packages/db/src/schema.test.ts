@@ -160,7 +160,11 @@ describe('migração inicial em Postgres real', () => {
     const journal = await pool.query<{ total: string }>(
       'SELECT count(*) AS total FROM drizzle.__drizzle_migrations',
     );
-    expect(journal.rows[0]?.total).toBe('1');
+    // Uma linha por migração do journal: reaplicar o comando não registra nenhuma de novo.
+    const entradas = JSON.parse(
+      await readFile(new URL('../migrations/meta/_journal.json', import.meta.url), 'utf8'),
+    ) as { entries: unknown[] };
+    expect(journal.rows[0]?.total).toBe(String(entradas.entries.length));
   });
 
   it('preserva os nove status e os demais enums definidos no contrato', async () => {

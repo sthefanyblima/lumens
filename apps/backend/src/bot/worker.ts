@@ -137,6 +137,15 @@ async function prepareQueue(boss: Boss, name: string, deadLetter: string): Promi
 const esperar = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * Prefixo do HMAC para correlacionar os logs. Não confia no formato do job: um job antigo ou
+ * malformado não pode fazer o log lançar, ou o handler cai e o pg-boss falha o lote inteiro.
+ */
+function conversaDoLog(data: unknown): string | null {
+  const phoneHmac = (data as { phoneHmac?: unknown } | null | undefined)?.phoneHmac;
+  return typeof phoneHmac === 'string' ? phoneHmac.slice(0, 12) : null;
+}
+
+/**
  * Roda a mensagem até dar certo, tentando de novo depois de cada espera de `retryDelaysMs`.
  * Transição inválida é bug do handler, não falha passageira: não adianta tentar de novo.
  */
@@ -151,7 +160,7 @@ async function processWithRetries(
       return { id: job.id, status: 'completed' };
     } catch (erro) {
       const delay = delays[tentativa];
-      const log = deps.logger.child({ conversa: job.data.phoneHmac.slice(0, 12) });
+      const log = deps.logger.child({ conversa: conversaDoLog(job.data) });
       if (delay === undefined || erro instanceof InvalidTransitionError) {
         log.error({ erro: resumoDoErro(erro) }, 'mensagem descartada para a fila de mortas');
         return { id: job.id, status: 'deadletter', output: resumoDoErro(erro) };
@@ -196,7 +205,7 @@ export async function registerReplyWorker(
         results.push({ id: job.id, status: 'completed' });
       } catch (erro) {
         logger
-          .child({ conversa: job.data.phoneHmac.slice(0, 12) })
+          .child({ conversa: conversaDoLog(job.data) })
           .warn({ erro: resumoDoErro(erro) }, 'envio das respostas falhou');
         results.push({ id: job.id, status: 'failed', output: resumoDoErro(erro) });
       }
@@ -215,7 +224,7 @@ export function logSender(logger: Logger): ReplySender {
     send: (message) => {
       logger.info(
         {
-          conversa: message.phoneHmac.slice(0, 12),
+          conversa: conversaDoLog(message),
           respostas: message.replies.length,
           caracteres: message.replies.reduce((total, r) => total + r.length, 0),
         },
