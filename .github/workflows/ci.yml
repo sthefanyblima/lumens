@@ -73,6 +73,10 @@ jobs:
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         run: pnpm format:check
 
+      - name: Build do site
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
+        run: pnpm --filter @lumens/site build
+
       # Mesma fonte usada pelo Docker local.
       - name: Criar o banco de teste
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
