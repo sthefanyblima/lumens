@@ -15,7 +15,7 @@ export function CardPauta({ pauta }: { pauta: Pauta }) {
         <Link href={`/p/${pauta.slug}`}>{pauta.titulo}</Link>
       </h2>
       <StatusPill status={pauta.status} />
-      <BarraApoios apoios={pauta.apoios} meta={pauta.meta} />
+      <BarraApoios apoios={pauta.apoios} meta={pauta.meta} rotulo={`Apoios: ${pauta.titulo}`} />
     </article>
   );
 }

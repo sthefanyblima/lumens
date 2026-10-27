@@ -1,7 +1,9 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { STATUS_PAUTA } from '../dados/tipos';
+import { PAUTAS_TESTE } from '../dados/pautas-teste';
 import { BarraApoios, formatarNumero, percentual } from './BarraApoios';
+import { CardPauta } from './CardPauta';
 import { STATUS, StatusPill } from './StatusPill';
 
 // Contraste WCAG 2.x entre duas cores #RRGGBB.
@@ -33,10 +35,18 @@ it('formata números com separador de milhar', () => {
 
 describe('BarraApoios', () => {
   it('anuncia o progresso para leitor de tela', () => {
-    const html = renderToStaticMarkup(<BarraApoios apoios={1240} meta={300} />);
+    const html = renderToStaticMarkup(
+      <BarraApoios apoios={1240} meta={300} rotulo="Apoios: Mais mesas no RU" />,
+    );
     expect(html).toContain('role="progressbar"');
+    expect(html).toContain('aria-label="Apoios: Mais mesas no RU"');
     expect(html).toContain('aria-valuenow="100"');
     expect(html).toContain('1.240 de 300 apoios');
+  });
+
+  it.each(PAUTAS_TESTE)('no card de $slug, o nome da barra identifica a pauta', (pauta) => {
+    const html = renderToStaticMarkup(<CardPauta pauta={pauta} />);
+    expect(html).toContain(`aria-label="Apoios: ${pauta.titulo}"`);
   });
 });
 

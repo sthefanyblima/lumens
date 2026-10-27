@@ -9,13 +9,23 @@ export function percentual(apoios: number, meta: number): number {
   return Math.min(100, Math.round((apoios / meta) * 100));
 }
 
-export function BarraApoios({ apoios, meta }: { apoios: number; meta: number }) {
+/** `rotulo` é o nome acessível da barra: diz de qual pauta são os apoios. */
+export function BarraApoios({
+  apoios,
+  meta,
+  rotulo,
+}: {
+  apoios: number;
+  meta: number;
+  rotulo: string;
+}) {
   const legenda = `${formatarNumero(apoios)} de ${formatarNumero(meta)} apoios`;
   return (
     <div className={estilos.barra}>
       <div
         className={estilos.trilho}
         role="progressbar"
+        aria-label={rotulo}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={percentual(apoios, meta)}
