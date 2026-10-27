@@ -1,0 +1,26 @@
+.pagina {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--espaco);
+}
+
+.titulo {
+  margin: 0;
+  font:
+    800 1.75em var(--fonte-titulo),
+    sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.subtitulo {
+  margin: 4px 0 var(--espaco);
+  color: var(--tinta-2);
+}
+
+.lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
