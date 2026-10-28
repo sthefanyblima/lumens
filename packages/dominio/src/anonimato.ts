@@ -99,11 +99,29 @@ const RE_EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
  * código do país: um número solto de oito dígitos é quase sempre outra coisa
  * (ano, quantia, protocolo), e a matrícula abaixo cobre as sequências longas.
  */
-const RE_TELEFONE =
-  /(?:\+?55[\s.-]?)?(?:\(\d{2}\)[\s.-]*\d{4,5}[\s.-]?\d{4}|\b\d{2}[\s.-]\d{4,5}[\s.-]?\d{4}\b|\b\d{4,5}-\d{4}\b)/g;
+const RE_TELEFONE = new RegExp(
+  [
+    // +55 na frente já delimita o número, então os separadores internos ficam
+    // todos opcionais: "+55 82 99999-1234" e "+5582999991234" são a mesma coisa.
+    String.raw`\+55[\s.-]?\(?\d{2}\)?[\s.-]?\d{4,5}[\s.-]?\d{4}`,
+    // DDD entre parênteses.
+    String.raw`\(\d{2}\)[\s.-]*\d{4,5}[\s.-]?\d{4}`,
+    // DDD solto: exige separador depois dele, senão confunde com número comum.
+    String.raw`\b\d{2}[\s.-]\d{4,5}[\s.-]?\d{4}\b`,
+    // Sem DDD: só com o traço, pelo mesmo motivo.
+    String.raw`\b\d{4,5}-\d{4}\b`,
+  ].join('|'),
+  'g',
+);
 
-/** Matrícula da UFAL e qualquer outra sequência longa de dígitos. */
-const RE_MATRICULA = /\b\d{8,12}\b/g;
+/**
+ * Matrícula da UFAL e qualquer outra sequência longa de dígitos.
+ *
+ * Sem teto: um telefone com código do país colado tem 13 dígitos e escapava do
+ * limite anterior de 12, caindo no vão entre os dois padrões. Nada que apareça
+ * num pedido ao Fala.BR tem oito dígitos seguidos sem ser identificador.
+ */
+const RE_MATRICULA = /\b\d{8,}\b/g;
 
 const RE_COMBINANTES = /[̀-ͯ]/g;
 
@@ -271,21 +289,32 @@ function acharPossiveisNomes(original: string, norm: TextoNormalizado): Achado[]
  * uma por pedaço — e quem revisa veria a mesma coisa repetida.
  */
 function limpar(achados: Achado[]): Achado[] {
-  const peso: Record<Severidade, number> = { bloqueio: 0, aviso: 1 };
-  const ordenados = [...achados].sort(
-    (a, b) => a.inicio - b.inicio || b.fim - a.fim || peso[a.severidade] - peso[b.severidade],
+  const porPosicao = (a: Achado, b: Achado): number => a.inicio - b.inicio || b.fim - a.fim;
+  const seCruzam = (a: Achado, b: Achado): boolean => a.inicio < b.fim && b.inicio < a.fim;
+
+  /** Descarta achado inteiramente contido em outro da mesma severidade. */
+  const semAninhados = (lista: Achado[]): Achado[] => {
+    const saida: Achado[] = [];
+    for (const achado of [...lista].sort(porPosicao)) {
+      const anterior = saida[saida.length - 1];
+      const contido =
+        anterior !== undefined && achado.inicio >= anterior.inicio && achado.fim <= anterior.fim;
+      if (!contido) saida.push(achado);
+    }
+    return saida;
+  };
+
+  // Cada severidade é reduzida separadamente, e só então os avisos que cruzam
+  // um bloqueio saem. A separação é o ponto: num passe único sobre a lista
+  // misturada, o aviso "professora Sthefany" — que começa antes e contém o
+  // bloqueio do nome conhecido — absorveria o bloqueio, e bastaria escrever um
+  // tratamento antes do nome para um texto barrado virar liberado.
+  const bloqueios = semAninhados(achados.filter((a) => a.severidade === 'bloqueio'));
+  const avisos = semAninhados(achados.filter((a) => a.severidade === 'aviso')).filter(
+    (aviso) => !bloqueios.some((bloqueio) => seCruzam(aviso, bloqueio)),
   );
 
-  const resultado: Achado[] = [];
-  for (const achado of ordenados) {
-    const anterior = resultado[resultado.length - 1];
-    if (anterior !== undefined && achado.inicio >= anterior.inicio && achado.fim <= anterior.fim) {
-      continue;
-    }
-    resultado.push(achado);
-  }
-
-  return resultado;
+  return [...bloqueios, ...avisos].sort(porPosicao);
 }
 
 /**

@@ -100,11 +100,24 @@ describe('conferirAnonimato (RN08)', () => {
       ['telefone com DDD', 'Ligar para (82) 99999-1234.', 'telefone'],
       ['telefone com traço', 'Telefone 82 98888-7777 para contato.', 'telefone'],
       ['matrícula', 'Matrícula 20231234567 do solicitante.', 'matricula'],
+      // Regressão: com +55 colado no DDD não havia separador nenhum, então o
+      // padrão de telefone não pegava — e os 13 dígitos passavam do teto de 12
+      // da matrícula. O contato inteiro escapava para o texto público.
+      ['telefone com +55 sem separador', 'Ligar +5582999991234.', 'telefone'],
+      ['telefone com +55 espaçado', 'Ligar +55 82 99999-1234.', 'telefone'],
     ])('bloqueia %s', (_caso, texto, motivo) => {
       const v = conferirAnonimato(texto);
 
       expect(v.liberado).toBe(false);
       expect(motivos(v.achados)).toContain(motivo);
+    });
+
+    it('sequência longa de dígitos sem formato nenhum também é bloqueada', () => {
+      // O vão entre os dois padrões: sem o teto na matrícula, nada com oito ou
+      // mais dígitos seguidos passa calado.
+      const v = conferirAnonimato('Contato 5582999991234 para falar.');
+
+      expect(v.liberado).toBe(false);
     });
 
     it('não confunde número comum com telefone', () => {
@@ -132,6 +145,27 @@ describe('conferirAnonimato (RN08)', () => {
 
       expect(v.liberado).toBe(true);
       expect(v.achados.map((a) => a.severidade)).toEqual(['aviso']);
+    });
+
+    it('tratamento antes de nome conhecido continua bloqueando', () => {
+      // Regressão: o aviso "professora Sthefany" começa antes e contém o
+      // bloqueio do nome conhecido. Enquanto a limpeza olhava os dois juntos,
+      // o aviso absorvia o bloqueio e bastava escrever um tratamento antes do
+      // nome para um texto barrado virar liberado.
+      const v = conferirAnonimato('A professora Sthefany confirmou.', {
+        nomesConhecidos: ['Sthefany Lima'],
+      });
+
+      expect(v.liberado).toBe(false);
+      expect(motivos(v.achados)).toContain('nome_conhecido');
+    });
+
+    it('aviso que cruza bloqueio não vira achado separado', () => {
+      const v = conferirAnonimato('A professora Sthefany confirmou.', {
+        nomesConhecidos: ['Sthefany Lima'],
+      });
+
+      expect(trechos(v.achados)).toEqual(['Sthefany']);
     });
 
     it('não avisa quando o tratamento se refere a um lugar, não a uma pessoa', () => {
