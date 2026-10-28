@@ -8,6 +8,20 @@
       "when": 1792990663976,
       "tag": "0000_fantastic_ulik",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793061518884,
+      "tag": "0001_evento_append_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793102793452,
+      "tag": "0002_app_role_privileges",
+      "breakpoints": true
     }
   ]
 }

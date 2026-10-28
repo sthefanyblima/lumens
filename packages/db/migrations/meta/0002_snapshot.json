@@ -1,0 +1,1340 @@
+{
+  "id": "0d46c7f9-5d7c-420c-99e4-f2580a1835be",
+  "prevId": "290ff8ba-43f5-4a4b-927a-d98f0bbb72fc",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.apoio": {
+      "name": "apoio",
+      "schema": "",
+      "columns": {
+        "pauta_id": {
+          "name": "pauta_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estudante_id": {
+          "name": "estudante_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "origem": {
+          "name": "origem",
+          "type": "origem_apoio",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "apoio_estudante_id_idx": {
+          "name": "apoio_estudante_id_idx",
+          "columns": [
+            {
+              "expression": "estudante_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "apoio_pauta_id_pauta_id_fk": {
+          "name": "apoio_pauta_id_pauta_id_fk",
+          "tableFrom": "apoio",
+          "columnsFrom": ["pauta_id"],
+          "tableTo": "pauta",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        },
+        "apoio_estudante_id_estudante_id_fk": {
+          "name": "apoio_estudante_id_estudante_id_fk",
+          "tableFrom": "apoio",
+          "columnsFrom": ["estudante_id"],
+          "tableTo": "estudante",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {
+        "apoio_pauta_id_estudante_id_pk": {
+          "name": "apoio_pauta_id_estudante_id_pk",
+          "columns": ["pauta_id", "estudante_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.bloco": {
+      "name": "bloco",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nome": {
+          "name": "nome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "base_estudantes": {
+          "name": "base_estudantes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "bloco_slug_unique": {
+          "name": "bloco_slug_unique",
+          "columns": ["slug"],
+          "nullsNotDistinct": false
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "bloco_base_estudantes_nao_negativa": {
+          "name": "bloco_base_estudantes_nao_negativa",
+          "value": "\"bloco\".\"base_estudantes\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.caminho": {
+      "name": "caminho",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "pauta_id": {
+          "name": "pauta_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tipo": {
+          "name": "tipo",
+          "type": "tipo_caminho",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "protocolo": {
+          "name": "protocolo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prazo": {
+          "name": "prazo",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aberto_em": {
+          "name": "aberto_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "caminho_pauta_id_idx": {
+          "name": "caminho_pauta_id_idx",
+          "columns": [
+            {
+              "expression": "pauta_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "caminho_pauta_id_pauta_id_fk": {
+          "name": "caminho_pauta_id_pauta_id_fk",
+          "tableFrom": "caminho",
+          "columnsFrom": ["pauta_id"],
+          "tableTo": "pauta",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.codigo_verificacao": {
+      "name": "codigo_verificacao",
+      "schema": "",
+      "columns": {
+        "telefone_hmac": {
+          "name": "telefone_hmac",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "codigo_hash": {
+          "name": "codigo_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expira_em": {
+          "name": "expira_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tentativas": {
+          "name": "tentativas",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "codigo_verificacao_tentativas_nao_negativas": {
+          "name": "codigo_verificacao_tentativas_nao_negativas",
+          "value": "\"codigo_verificacao\".\"tentativas\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.conversa": {
+      "name": "conversa",
+      "schema": "",
+      "columns": {
+        "telefone_hmac": {
+          "name": "telefone_hmac",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "passo": {
+          "name": "passo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dados": {
+          "name": "dados",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "atualizado_em": {
+          "name": "atualizado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.curador": {
+      "name": "curador",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "email_hmac": {
+          "name": "email_hmac",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email_cifrado": {
+          "name": "email_cifrado",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nome": {
+          "name": "nome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ativo": {
+          "name": "ativo",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "curador_email_hmac_unique": {
+          "name": "curador_email_hmac_unique",
+          "columns": ["email_hmac"],
+          "nullsNotDistinct": false
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.estudante": {
+      "name": "estudante",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "telefone_hmac": {
+          "name": "telefone_hmac",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "telefone_cifrado": {
+          "name": "telefone_cifrado",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email_hmac": {
+          "name": "email_hmac",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email_cifrado": {
+          "name": "email_cifrado",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "curso": {
+          "name": "curso",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verificado_em": {
+          "name": "verificado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "saiu_em": {
+          "name": "saiu_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "estudante_telefone_hmac_unique": {
+          "name": "estudante_telefone_hmac_unique",
+          "columns": ["telefone_hmac"],
+          "nullsNotDistinct": false
+        },
+        "estudante_email_hmac_unique": {
+          "name": "estudante_email_hmac_unique",
+          "columns": ["email_hmac"],
+          "nullsNotDistinct": false
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.evento": {
+      "name": "evento",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "pauta_id": {
+          "name": "pauta_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tipo": {
+          "name": "tipo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dados": {
+          "name": "dados",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "origem": {
+          "name": "origem",
+          "type": "origem_evento",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publico": {
+          "name": "publico",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "evento_pauta_criado_em_idx": {
+          "name": "evento_pauta_criado_em_idx",
+          "columns": [
+            {
+              "expression": "pauta_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "criado_em",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "evento_pauta_id_pauta_id_fk": {
+          "name": "evento_pauta_id_pauta_id_fk",
+          "tableFrom": "evento",
+          "columnsFrom": ["pauta_id"],
+          "tableTo": "pauta",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.mensagem_processada": {
+      "name": "mensagem_processada",
+      "schema": "",
+      "columns": {
+        "wamid": {
+          "name": "wamid",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "recebida_em": {
+          "name": "recebida_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.papel_pauta": {
+      "name": "papel_pauta",
+      "schema": "",
+      "columns": {
+        "pauta_id": {
+          "name": "pauta_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estudante_id": {
+          "name": "estudante_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "papel": {
+          "name": "papel",
+          "type": "papel_na_pauta",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "desde": {
+          "name": "desde",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "ate": {
+          "name": "ate",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ultima_atividade_em": {
+          "name": "ultima_atividade_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "papel_pauta_estudante_id_idx": {
+          "name": "papel_pauta_estudante_id_idx",
+          "columns": [
+            {
+              "expression": "estudante_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "papel_pauta_pauta_id_pauta_id_fk": {
+          "name": "papel_pauta_pauta_id_pauta_id_fk",
+          "tableFrom": "papel_pauta",
+          "columnsFrom": ["pauta_id"],
+          "tableTo": "pauta",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        },
+        "papel_pauta_estudante_id_estudante_id_fk": {
+          "name": "papel_pauta_estudante_id_estudante_id_fk",
+          "tableFrom": "papel_pauta",
+          "columnsFrom": ["estudante_id"],
+          "tableTo": "estudante",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {
+        "papel_pauta_pauta_id_estudante_id_desde_pk": {
+          "name": "papel_pauta_pauta_id_estudante_id_desde_pk",
+          "columns": ["pauta_id", "estudante_id", "desde"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.pauta": {
+      "name": "pauta",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "titulo": {
+          "name": "titulo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "descricao": {
+          "name": "descricao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bloco_id": {
+          "name": "bloco_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "categoria": {
+          "name": "categoria",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "status_pauta",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'em_curadoria'"
+        },
+        "meta": {
+          "name": "meta",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "criada_em": {
+          "name": "criada_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "aprovada_em": {
+          "name": "aprovada_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "meta_batida_em": {
+          "name": "meta_batida_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "motivo_recusa": {
+          "name": "motivo_recusa",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "busca": {
+          "name": "busca",
+          "type": "tsvector",
+          "primaryKey": false,
+          "notNull": true,
+          "generated": {
+            "type": "stored",
+            "as": "to_tsvector('portuguese'::regconfig, \"titulo\" || ' ' || \"descricao\")"
+          }
+        }
+      },
+      "indexes": {
+        "pauta_bloco_id_idx": {
+          "name": "pauta_bloco_id_idx",
+          "columns": [
+            {
+              "expression": "bloco_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "pauta_status_idx": {
+          "name": "pauta_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "pauta_busca_idx": {
+          "name": "pauta_busca_idx",
+          "columns": [
+            {
+              "expression": "busca",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "gin",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "pauta_bloco_id_bloco_id_fk": {
+          "name": "pauta_bloco_id_bloco_id_fk",
+          "tableFrom": "pauta",
+          "columnsFrom": ["bloco_id"],
+          "tableTo": "bloco",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "pauta_slug_unique": {
+          "name": "pauta_slug_unique",
+          "columns": ["slug"],
+          "nullsNotDistinct": false
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "pauta_meta_positiva": {
+          "name": "pauta_meta_positiva",
+          "value": "\"pauta\".\"meta\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.promessa": {
+      "name": "promessa",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "pauta_id": {
+          "name": "pauta_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resumo": {
+          "name": "resumo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "data_entrega": {
+          "name": "data_entrega",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fonte": {
+          "name": "fonte",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "registrada_por": {
+          "name": "registrada_por",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "conferencia_abre_em": {
+          "name": "conferencia_abre_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "conferencia_fecha_em": {
+          "name": "conferencia_fecha_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resultado": {
+          "name": "resultado",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "promessa_pauta_id_idx": {
+          "name": "promessa_pauta_id_idx",
+          "columns": [
+            {
+              "expression": "pauta_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "promessa_registrada_por_idx": {
+          "name": "promessa_registrada_por_idx",
+          "columns": [
+            {
+              "expression": "registrada_por",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "promessa_ativa_por_pauta_unique": {
+          "name": "promessa_ativa_por_pauta_unique",
+          "columns": [
+            {
+              "expression": "pauta_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "with": {},
+          "method": "btree",
+          "where": "\"promessa\".\"resultado\" IS NULL",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "promessa_pauta_id_pauta_id_fk": {
+          "name": "promessa_pauta_id_pauta_id_fk",
+          "tableFrom": "promessa",
+          "columnsFrom": ["pauta_id"],
+          "tableTo": "pauta",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        },
+        "promessa_registrada_por_curador_id_fk": {
+          "name": "promessa_registrada_por_curador_id_fk",
+          "tableFrom": "promessa",
+          "columnsFrom": ["registrada_por"],
+          "tableTo": "curador",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.proposta": {
+      "name": "proposta",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "pauta_id": {
+          "name": "pauta_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "descricao": {
+          "name": "descricao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pessoas_necessarias": {
+          "name": "pessoas_necessarias",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "status_proposta",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'aberta'"
+        },
+        "executada_em": {
+          "name": "executada_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "proposta_pauta_id_idx": {
+          "name": "proposta_pauta_id_idx",
+          "columns": [
+            {
+              "expression": "pauta_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "proposta_pauta_id_pauta_id_fk": {
+          "name": "proposta_pauta_id_pauta_id_fk",
+          "tableFrom": "proposta",
+          "columnsFrom": ["pauta_id"],
+          "tableTo": "pauta",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "proposta_pessoas_necessarias_positivas": {
+          "name": "proposta_pessoas_necessarias_positivas",
+          "value": "\"proposta\".\"pessoas_necessarias\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.relato": {
+      "name": "relato",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "pauta_id": {
+          "name": "pauta_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estudante_id": {
+          "name": "estudante_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "texto": {
+          "name": "texto",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "foto_chave": {
+          "name": "foto_chave",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "moderacao": {
+          "name": "moderacao",
+          "type": "moderacao_relato",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pendente'"
+        },
+        "moderado_em": {
+          "name": "moderado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "relato_pauta_id_idx": {
+          "name": "relato_pauta_id_idx",
+          "columns": [
+            {
+              "expression": "pauta_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "relato_estudante_id_idx": {
+          "name": "relato_estudante_id_idx",
+          "columns": [
+            {
+              "expression": "estudante_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "relato_pauta_id_pauta_id_fk": {
+          "name": "relato_pauta_id_pauta_id_fk",
+          "tableFrom": "relato",
+          "columnsFrom": ["pauta_id"],
+          "tableTo": "pauta",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        },
+        "relato_estudante_id_estudante_id_fk": {
+          "name": "relato_estudante_id_estudante_id_fk",
+          "tableFrom": "relato",
+          "columnsFrom": ["estudante_id"],
+          "tableTo": "estudante",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.resposta_conferencia": {
+      "name": "resposta_conferencia",
+      "schema": "",
+      "columns": {
+        "promessa_id": {
+          "name": "promessa_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estudante_id": {
+          "name": "estudante_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resposta": {
+          "name": "resposta",
+          "type": "resposta_conferencia_valor",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "resposta_conferencia_estudante_id_idx": {
+          "name": "resposta_conferencia_estudante_id_idx",
+          "columns": [
+            {
+              "expression": "estudante_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "resposta_conferencia_promessa_id_promessa_id_fk": {
+          "name": "resposta_conferencia_promessa_id_promessa_id_fk",
+          "tableFrom": "resposta_conferencia",
+          "columnsFrom": ["promessa_id"],
+          "tableTo": "promessa",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        },
+        "resposta_conferencia_estudante_id_estudante_id_fk": {
+          "name": "resposta_conferencia_estudante_id_estudante_id_fk",
+          "tableFrom": "resposta_conferencia",
+          "columnsFrom": ["estudante_id"],
+          "tableTo": "estudante",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {
+        "resposta_conferencia_promessa_id_estudante_id_pk": {
+          "name": "resposta_conferencia_promessa_id_estudante_id_pk",
+          "columns": ["promessa_id", "estudante_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.voluntario": {
+      "name": "voluntario",
+      "schema": "",
+      "columns": {
+        "proposta_id": {
+          "name": "proposta_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estudante_id": {
+          "name": "estudante_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "voluntario_estudante_id_idx": {
+          "name": "voluntario_estudante_id_idx",
+          "columns": [
+            {
+              "expression": "estudante_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "voluntario_proposta_id_proposta_id_fk": {
+          "name": "voluntario_proposta_id_proposta_id_fk",
+          "tableFrom": "voluntario",
+          "columnsFrom": ["proposta_id"],
+          "tableTo": "proposta",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        },
+        "voluntario_estudante_id_estudante_id_fk": {
+          "name": "voluntario_estudante_id_estudante_id_fk",
+          "tableFrom": "voluntario",
+          "columnsFrom": ["estudante_id"],
+          "tableTo": "estudante",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {
+        "voluntario_proposta_id_estudante_id_pk": {
+          "name": "voluntario_proposta_id_estudante_id_pk",
+          "columns": ["proposta_id", "estudante_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.moderacao_relato": {
+      "name": "moderacao_relato",
+      "schema": "public",
+      "values": ["pendente", "aprovado", "recusado"]
+    },
+    "public.origem_apoio": {
+      "name": "origem_apoio",
+      "schema": "public",
+      "values": ["bot", "site"]
+    },
+    "public.origem_evento": {
+      "name": "origem_evento",
+      "schema": "public",
+      "values": ["bot", "curadoria", "agendador"]
+    },
+    "public.papel_na_pauta": {
+      "name": "papel_na_pauta",
+      "schema": "public",
+      "values": ["owner", "co_owner"]
+    },
+    "public.resposta_conferencia_valor": {
+      "name": "resposta_conferencia_valor",
+      "schema": "public",
+      "values": ["sim", "em_parte", "nao"]
+    },
+    "public.status_pauta": {
+      "name": "status_pauta",
+      "schema": "public",
+      "values": [
+        "em_curadoria",
+        "recusada",
+        "juntando_apoios",
+        "meta_batida",
+        "cobrando",
+        "prometido",
+        "entregue_em_parte",
+        "descumprida",
+        "conquistada"
+      ]
+    },
+    "public.status_proposta": {
+      "name": "status_proposta",
+      "schema": "public",
+      "values": ["aberta", "executada"]
+    },
+    "public.tipo_caminho": {
+      "name": "tipo_caminho",
+      "schema": "public",
+      "values": ["falabr", "comunidade", "representante"]
+    }
+  },
+  "schemas": {},
+  "views": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

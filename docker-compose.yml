@@ -10,8 +10,8 @@ services:
     container_name: lumens-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:?defina POSTGRES_USER no .env (copie o .env.example)}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_USER: ${POSTGRES_USER:?defina POSTGRES_USER no .env.database}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env.database}
       POSTGRES_DB: ${POSTGRES_DB:-lumens}
     ports:
       # Bind explícito em localhost: sem isso o Docker publica em 0.0.0.0 e o banco

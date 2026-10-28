@@ -24,10 +24,14 @@ async function migrarPeloComando() {
     process.execPath,
     [
       fileURLToPath(new URL('../node_modules/tsx/dist/cli.mjs', import.meta.url)),
-      '--env-file-if-exists=../../.env',
+      '--env-file-if-exists=../../.env.database',
       'src/migrate.ts',
     ],
-    { cwd: pastaDb, env: { ...process.env, DATABASE_URL: urlTeste }, timeout: 30_000 },
+    {
+      cwd: pastaDb,
+      env: { ...process.env, DATABASE_URL_MIGRACAO: urlTeste },
+      timeout: 30_000,
+    },
   );
 }
 
@@ -92,6 +96,49 @@ async function pauta(slug = randomUUID(), blocoId: string | null = null) {
   return idCriado(rows);
 }
 
+type EventoPersistido = {
+  id: string;
+  pauta_id: string;
+  tipo: string;
+  dados: Record<string, unknown>;
+  origem: string;
+  publico: boolean;
+  criado_em: Date;
+};
+
+async function evento(pautaId: string): Promise<EventoPersistido> {
+  const fixture = {
+    pauta_id: pautaId,
+    tipo: 'pauta_criada',
+    dados: { titulo: 'Bibliotecas abertas' },
+    origem: 'curadoria',
+    publico: false,
+    criado_em: new Date('2026-10-26T12:00:00.123Z'),
+  };
+  const { rows } = await pool.query<{ id: string }>(
+    `INSERT INTO evento (pauta_id, tipo, dados, origem, publico, criado_em)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    [
+      fixture.pauta_id,
+      fixture.tipo,
+      fixture.dados,
+      fixture.origem,
+      fixture.publico,
+      fixture.criado_em,
+    ],
+  );
+  return { id: idCriado(rows), ...fixture };
+}
+
+async function buscarEvento(id: string) {
+  const { rows } = await pool.query<EventoPersistido>(
+    `SELECT id, pauta_id, tipo, dados, origem, publico, criado_em
+     FROM evento WHERE id = $1`,
+    [id],
+  );
+  return rows[0];
+}
+
 async function curador(email = randomUUID()) {
   const { rows } = await pool.query<{ id: string }>(
     `INSERT INTO curador (email_hmac, email_cifrado, nome)
@@ -130,7 +177,9 @@ describe('migração inicial em Postgres real', () => {
     const raiz = JSON.parse(
       await readFile(new URL('../../../package.json', import.meta.url), 'utf8'),
     ) as { scripts: Record<string, string> };
-    expect(pacote.scripts['db:migrate']).toBe('tsx --env-file-if-exists=../../.env src/migrate.ts');
+    expect(pacote.scripts['db:migrate']).toBe(
+      'tsx --env-file-if-exists=../../.env.database src/migrate.ts',
+    );
     expect(raiz.scripts['db:migrate']).toBe('pnpm --filter @lumens/db db:migrate');
   });
 
@@ -160,7 +209,70 @@ describe('migração inicial em Postgres real', () => {
     const journal = await pool.query<{ total: string }>(
       'SELECT count(*) AS total FROM drizzle.__drizzle_migrations',
     );
-    expect(journal.rows[0]?.total).toBe('1');
+    expect(journal.rows[0]?.total).toBe('3');
+    const registro = await evento(await pauta());
+    await expect(
+      pool.query('UPDATE evento SET publico = true WHERE id = $1', [registro.id]),
+    ).rejects.toMatchObject({ code: 'P0001', message: 'evento é somente inserção' });
+  });
+
+  it('persiste um evento válido com todos os campos da fixture', async () => {
+    const registro = await evento(await pauta());
+
+    expect(await buscarEvento(registro.id)).toEqual(registro);
+  });
+
+  it.each([
+    ['dados', { correcao: true }],
+    ['publico', true],
+  ] as const)('rejeita alteração de %s sem modificar o evento', async (campo, valor) => {
+    const registro = await evento(await pauta());
+
+    await expect(
+      pool.query(`UPDATE evento SET ${campo} = $1 WHERE id = $2`, [valor, registro.id]),
+    ).rejects.toMatchObject({ code: 'P0001', message: 'evento é somente inserção' });
+    expect(await buscarEvento(registro.id)).toEqual(registro);
+  });
+
+  it('rejeita exclusão de evento sem reduzir a contagem', async () => {
+    const registro = await evento(await pauta());
+    const antes = await pool.query<{ total: string }>('SELECT count(*) AS total FROM evento');
+
+    await expect(
+      pool.query('DELETE FROM evento WHERE id = $1', [registro.id]),
+    ).rejects.toMatchObject({ code: 'P0001', message: 'evento é somente inserção' });
+    const depois = await pool.query<{ total: string }>('SELECT count(*) AS total FROM evento');
+    expect(depois.rows[0]?.total).toBe(antes.rows[0]?.total);
+    expect(await buscarEvento(registro.id)).toEqual(registro);
+  });
+
+  it('rejeita TRUNCATE de evento e preserva as linhas', async () => {
+    const registro = await evento(await pauta());
+    const antes = await pool.query<{ total: string }>('SELECT count(*) AS total FROM evento');
+
+    await expect(pool.query('TRUNCATE evento')).rejects.toMatchObject({
+      code: 'P0001',
+      message: 'evento é somente inserção',
+    });
+    const depois = await pool.query<{ total: string }>('SELECT count(*) AS total FROM evento');
+    expect(depois.rows[0]?.total).toBe(antes.rows[0]?.total);
+    expect(await buscarEvento(registro.id)).toEqual(registro);
+  });
+
+  it('rejeita exclusão de pauta referenciada por evento', async () => {
+    const pautaId = await pauta();
+    const registro = await evento(pautaId);
+
+    await expect(pool.query('DELETE FROM pauta WHERE id = $1', [pautaId])).rejects.toMatchObject({
+      code: '23503',
+      constraint: 'evento_pauta_id_pauta_id_fk',
+    });
+    const { rows: pautas } = await pool.query<{ existe: boolean }>(
+      'SELECT EXISTS (SELECT 1 FROM pauta WHERE id = $1) AS existe',
+      [pautaId],
+    );
+    expect(pautas[0]?.existe).toBe(true);
+    expect(await buscarEvento(registro.id)).toEqual(registro);
   });
 
   it('preserva os nove status e os demais enums definidos no contrato', async () => {
