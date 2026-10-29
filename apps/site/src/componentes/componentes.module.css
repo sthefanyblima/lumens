@@ -66,3 +66,23 @@
 .titulo a:hover {
   text-decoration: underline;
 }
+
+.filtro {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--espaco);
+  font-weight: 600;
+}
+
+.filtro select {
+  flex: 1;
+  min-height: 44px;
+  padding: 0 12px;
+  font: inherit;
+  font-weight: 400;
+  color: var(--tinta);
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+}
