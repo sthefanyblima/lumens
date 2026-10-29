@@ -1,11 +1,14 @@
-# Instruções para revisão de código
+# Instruções do projeto
 
-## Idioma
+## Code Review Rules
 
-- Escreva toda a revisão em português do Brasil.
+### Idioma
+
+- Escreva o resumo, o veredito e todos os comentários da revisão em português do Brasil.
+- Não publique comentários em inglês, exceto nomes técnicos, identificadores e trechos de código.
 - Seja direto, técnico e respeitoso.
 
-## Fonte de verdade
+### Fonte de verdade
 
 - O catálogo `.agent/patterns/`, quando existir, prevalece sobre o estilo do código vizinho.
 - Código novo deve seguir o catálogo ou uma divergência explicitamente aprovada na PR.
@@ -13,7 +16,7 @@
 - Aponte divergências antigas fora das linhas alteradas, mas não exija que sejam corrigidas nesta entrega.
 - Falhas preexistentes de lint ou formatação em linhas não tocadas devem ser relatadas, não atribuídas à PR.
 
-## Prioridades da revisão
+### Prioridades da revisão
 
 Revise principalmente:
 
@@ -28,7 +31,7 @@ Revise principalmente:
 
 Não bloqueie a PR apenas por preferências pessoais de estilo.
 
-## Simplicidade e escopo
+### Simplicidade e escopo
 
 - Prefira mudanças cirúrgicas e soluções simples.
 - Aponte complexidade desnecessária e abstrações prematuras.
@@ -36,7 +39,7 @@ Não bloqueie a PR apenas por preferências pessoais de estilo.
 - Diferencie claramente problemas introduzidos pela PR de problemas preexistentes.
 - Todo apontamento deve descrever um impacto concreto e reproduzível.
 
-## Testes e evidências
+### Testes e evidências
 
 - Verifique se os testes exercitam o comportamento real e falhariam sem a implementação.
 - Para correções de bug, solicite um teste de regressão quando aplicável.
@@ -44,7 +47,7 @@ Não bloqueie a PR apenas por preferências pessoais de estilo.
 - Em migrations, verifique upgrade, constraints, dados existentes e efeitos destrutivos.
 - Não afirme que algo falha sem indicar um cenário concreto e reproduzível.
 
-## Formato dos apontamentos
+### Formato dos apontamentos
 
 Para cada problema encontrado, informe:
 
@@ -63,7 +66,7 @@ Use as severidades:
 
 Não publique apontamentos vagos, especulativos ou puramente cosméticos.
 
-## Resultado final
+### Resultado final
 
 Finalize com um dos seguintes veredictos:
 
