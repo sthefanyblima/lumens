@@ -36,10 +36,11 @@ erDiagram
     text telefone_hmac PK
     text passo
     jsonb dados
+    timestamptz expira_em
     timestamptz atualizado_em
   }
   mensagem_processada {
-    text wamid PK
+    text wamid_hmac PK
     timestamptz recebida_em
   }
 ```
@@ -70,8 +71,8 @@ da cifra. Os campos sem tipo indicado são `text`, exceto FKs UUID e enums lista
 | promessa             | id, pauta_id, resumo, data_entrega, fonte, registrada_por, conferencia_abre_em, conferencia_fecha_em, resultado                                   | resultado                                                | PK id; registrada_por referencia curador; uma ativa por pauta                       |
 | resposta_conferencia | promessa_id, estudante_id, resposta, criado_em                                                                                                    | nenhum                                                   | PK (promessa_id, estudante_id); criado_em = now()                                   |
 | evento               | id, pauta_id, tipo, dados (JSONB), origem, publico (boolean), criado_em                                                                           | nenhum                                                   | PK id; dados = {}; publico = false; criado_em = now()                               |
-| conversa             | telefone_hmac, passo, dados (JSONB), atualizado_em                                                                                                | nenhum                                                   | PK telefone_hmac; dados = {}; atualizado_em = now()                                 |
-| mensagem_processada  | wamid, recebida_em                                                                                                                                | nenhum                                                   | PK wamid; recebida_em = now()                                                       |
+| conversa             | telefone_hmac, passo, dados (JSONB), expira_em, atualizado_em                                                                                     | nenhum                                                   | PK telefone_hmac; dados = {}; expira_em e atualizado_em = now()                     |
+| mensagem_processada  | wamid_hmac, recebida_em                                                                                                                           | nenhum                                                   | PK wamid_hmac; recebida_em = now()                                                  |
 | curador              | id, email_hmac, email_cifrado, nome, ativo (boolean)                                                                                              | nenhum                                                   | PK id; email_hmac único; ativo = true                                               |
 
 A chave de `papel_pauta` inclui `desde` para preservar mandatos históricos. O limite de três
@@ -114,7 +115,7 @@ fechado na fonte recebida. Não pressupor valores além dos já acordados em cad
 
 ## Índices e invariantes
 
-- Apoio, voluntário, resposta e wamid têm unicidade garantida pelas respectivas PKs.
+- Apoio, voluntário, resposta e wamid (pelo HMAC, já que o wamid codifica o telefone) têm unicidade garantida pelas respectivas PKs.
 - Estudante tem telefone HMAC único e e-mail HMAC único quando preenchido. Vários e-mails
   nulos são permitidos durante o cadastro; curador exige ambos os campos de e-mail.
 - Promessa ativa significa `resultado IS NULL`. O índice único parcial

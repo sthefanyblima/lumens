@@ -5,7 +5,8 @@
   "description": "Esquema, migrações, views e seed do PostgreSQL (parte 1).",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./teste": "./src/teste.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
@@ -15,11 +16,12 @@
   },
   "dependencies": {
     "drizzle-orm": "0.45.4",
-    "pg": "8.23.1"
+    "pg": "8.23.1",
+    "tsx": "4.23.15"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11",
     "@types/pg": "^8.15.5",
-    "drizzle-kit": "0.31.11",
-    "tsx": "4.23.15"
+    "drizzle-kit": "0.31.11"
   }
 }

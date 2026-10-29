@@ -129,7 +129,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 Para conferir se o seu `.env` está completo:
 
 ```bash
-pnpm --filter @lumens/backend dev
+pnpm --filter @lumens/backend env:check
 ```
 
 Ele lista de uma vez todas as variáveis que faltam, ou confirma que o ambiente está válido.
@@ -147,6 +147,41 @@ Até o ambiente da AWS (1.1b), o site é publicado na Vercel pela integração c
 O projeto `lumens` está conectado ao repositório `sthefanyblima/lumens`, com `apps/site` como
 diretório do site. Cada merge na `main` dispara um novo build; quando ele termina com sucesso,
 o site é atualizado automaticamente. O status e os logs do deploy ficam no painel da Vercel.
+
+## Bot (parte 2)
+
+```bash
+pnpm db:up && pnpm db:migrate   # banco com as tabelas do bot
+pnpm dev                        # servidor em :3001 (PORT do .env)
+pnpm sim texto 'buraco no bloco 12'
+```
+
+O `pnpm dev` valida o ambiente e sobe o Fastify com o webhook da Meta (`GET`/`POST /webhook`)
+e a fila (pg-boss, que cria o próprio schema `pgboss` no banco). O simulador assina com o
+`META_APP_SECRET` do `.env`, então dá para testar o webhook (assinatura, dedup e fila) sem celular
+nem conta Meta: veja [apps/backend/SIMULADOR.md](apps/backend/SIMULADOR.md).
+
+O job de cada mensagem não leva telefone nem wamid em claro (o wamid da Meta codifica o
+telefone): vão como HMAC da `CHAVE_HMAC`, para achar a conversa, e cifrados com a `CHAVE_CIFRA`,
+para o worker responder.
+
+Um worker consome a fila `incoming-message` e anda a conversa. O novo estado, as respostas (na
+fila `outgoing-replies`) e a conclusão do job entram na mesma transação: se o processo cair no
+meio, a mensagem é reentregue em até 1 minuto e aplicada uma vez só. Enquanto o envio pela Meta
+não existe, as respostas aparecem no log do `pnpm dev` como `respostas do bot`, com o texto no
+campo `texto`. Só o `pnpm dev` (flag `--dev`) mostra o texto; o `start` de produção registra
+apenas quantas respostas saíram, porque uma resposta pode repetir o que a pessoa escreveu.
+
+Em produção não há `.env` nem devDependencies: o ambiente vem da hospedagem e o servidor sobe
+com `pnpm --filter @lumens/backend start` (migrações: `pnpm db:migrate`).
+
+Pendências da parte 2:
+
+- Envio das respostas pela API da Meta: trocar o `logSender` (`src/bot/worker.ts`) por um sender
+  que decifra o telefone e chama a Cloud API.
+- Handlers das histórias 2.4, 2.5 e 2.6 são placeholders (`TODO` em
+  `src/bot/conversation/handlers.ts`).
+- Verificar o webhook no painel da Meta e medir resposta < 5 s (critério de pronto da 2.1).
 
 ## Como contribuir
 
