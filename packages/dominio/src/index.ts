@@ -12,3 +12,10 @@ export {
   prazoLegal,
 } from './prazo';
 export type { ParametrosDePrazo, Prazo, TipoCaminho } from './prazo';
+
+export { registrarProtocolo } from './caminho-registro';
+export type {
+  MotivoRecusaProtocolo,
+  RegistroDeProtocolo,
+  ResultadoProtocolo,
+} from './caminho-registro';
