@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PAUTAS_TESTE } from './pautas-teste';
-import { pautasPublicas } from './pautas-publicas';
+import { pautasPublicas, totais } from './pautas-publicas';
 
 describe('pautasPublicas', () => {
   const lista = pautasPublicas(PAUTAS_TESTE);
@@ -28,5 +28,21 @@ describe('pautasPublicas', () => {
     const copia = [...PAUTAS_TESTE];
     pautasPublicas(PAUTAS_TESTE);
     expect(PAUTAS_TESTE).toEqual(copia);
+  });
+});
+
+describe('totais', () => {
+  it('conta abertas, soma apoios e conta conquistas das pautas públicas', () => {
+    // Públicas de teste: juntando_apoios 41, meta_batida 92, cobrando 318, prometido 1240,
+    // entregue_em_parte 143, descumprida 356, conquistada 340.
+    expect(totais(pautasPublicas(PAUTAS_TESTE))).toEqual({
+      abertas: 4,
+      apoios: 2530,
+      conquistas: 1,
+    });
+  });
+
+  it('lista vazia dá tudo zero', () => {
+    expect(totais([])).toEqual({ abertas: 0, apoios: 0, conquistas: 0 });
   });
 });

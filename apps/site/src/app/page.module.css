@@ -24,3 +24,46 @@
   display: grid;
   gap: 12px;
 }
+
+.totais {
+  margin-bottom: var(--espaco);
+  padding: 12px var(--espaco);
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+}
+
+.totaisTitulo {
+  margin: 0 0 8px;
+  font:
+    600 0.8125em var(--fonte-rotulo),
+    monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primaria-forte);
+}
+
+.totais dl {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 0;
+}
+
+/* Número em cima, rótulo embaixo, sem inverter a ordem de leitura (dt antes de dd). */
+.totais dl div {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.totais dt {
+  font-size: 0.8125em;
+  color: var(--tinta-2);
+}
+
+.totais dd {
+  margin: 0;
+  font:
+    800 1.5em var(--fonte-titulo),
+    sans-serif;
+}
