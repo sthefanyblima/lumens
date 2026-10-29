@@ -21,6 +21,11 @@ const opcional = z
   .optional()
   .transform((valor) => (valor === undefined || valor === '' ? undefined : valor));
 
+/** Ausente e vazia viram o padrão do esquema, pelo mesmo motivo de `opcional`. */
+function comPadrao<T extends z.ZodType>(esquema: T) {
+  return z.preprocess((valor) => (valor === '' ? undefined : valor), esquema);
+}
+
 /**
  * Chave de 32 bytes em base64 — o tamanho que o AES-256-GCM exige
  * (Roteiro da Parte 1, seção 6).
@@ -44,6 +49,18 @@ const chaveDe32Bytes = obrigatoria
 
 const esquema = z
   .object({
+    // Servidor HTTP (webhook da Meta; a API entra no mesmo servidor)
+    PORT: comPadrao(
+      z.coerce
+        .number({ error: 'não é um número — veja o .env.example' })
+        .int()
+        .positive()
+        .default(3001),
+    ),
+    LOG_LEVEL: comPadrao(
+      z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+    ),
+
     // Banco
     DATABASE_URL: obrigatoria,
     DATABASE_URL_LEITURA: obrigatoria,

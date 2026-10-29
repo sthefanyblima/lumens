@@ -1,0 +1,30 @@
+{
+  "blocos": [
+    {
+      "slug": "bloco-a",
+      "nome": "Bloco A",
+      "base_estudantes": 1200
+    },
+    {
+      "slug": "bloco-b",
+      "nome": "Bloco B",
+      "base_estudantes": 850
+    },
+    {
+      "slug": "bloco-c",
+      "nome": "Bloco C",
+      "base_estudantes": 120
+    },
+    {
+      "slug": "bloco-18",
+      "nome": "Bloco 18",
+      "base_estudantes": 5000
+    },
+    {
+      "slug": "ic",
+      "nome": "Instituto de Computação",
+      "base_estudantes": 600
+    }
+  ],
+  "pautas": []
+}

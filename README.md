@@ -65,7 +65,8 @@ Comandos úteis:
 
 Para rodar um comando em um pacote só: `pnpm --filter @lumens/dominio test`.
 
-CI (T3) e documentação completa (T21) entram nas próximas tasks.
+O CI executa tipos, lint, formatação, migração em base vazia e testes, incluindo integração
+com PostgreSQL. A documentação completa de operação entra na T21.
 
 ## Banco local
 
@@ -92,6 +93,23 @@ São dois bancos no mesmo container: `lumens`, para desenvolvimento, e `lumens_t
 testes de integração — criado pelos scripts de `docker/init/`, que rodam uma única vez, na
 criação do volume. Se editar algum deles, use `pnpm db:reset`.
 
+### Esquema e migrações
+
+```bash
+pnpm db:migrate   # aplica as migrações pendentes em DATABASE_URL; não reseta dados
+pnpm db:generate  # após alterar o schema Drizzle, gera SQL para revisão/versionamento
+```
+
+O [contrato do banco](docs/database/schema.md) contém o diagrama ER, campos, status e decisões
+da primeira versão. O esquema e os tipos de leitura/inserção são exportados por `@lumens/db`.
+As migrações SQL e os metadados do Drizzle ficam em `packages/db/migrations/`.
+
+`pnpm check` agora exige o Postgres local. A suíte usa `DATABASE_URL_TESTE` do `.env` ou do
+ambiente (nome terminado em `_test`) e usuário com `CREATEDB`; cria e remove uma base temporária
+por execução, sem apagar dados de `lumens` ou `lumens_test`. O usuário do Docker já permite isso.
+Não use credenciais de produção nos testes. Seed/`db:fresh` entram na T6; a proteção append-only
+de evento entra na T5.
+
 A versão do PostgreSQL é fixada no `docker-compose.yml` e precisa acompanhar a do banco de
 homologação, que será definida na T20.
 
@@ -111,7 +129,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 Para conferir se o seu `.env` está completo:
 
 ```bash
-pnpm --filter @lumens/backend dev
+pnpm --filter @lumens/backend env:check
 ```
 
 Ele lista de uma vez todas as variáveis que faltam, ou confirma que o ambiente está válido.
@@ -123,12 +141,47 @@ pnpm --filter @lumens/site dev     # http://localhost:3000
 pnpm --filter @lumens/site build   # build de produção
 ```
 
-Homologação: **https://lumens-five.vercel.app**. Até o ambiente da AWS (1.1b), o site é
-publicado na Vercel manualmente, a partir da `main` atualizada:
+Homologação: [lumens-hazel.vercel.app](https://lumens-hazel.vercel.app).
+
+Até o ambiente da AWS (1.1b), o site é publicado na Vercel pela integração com o GitHub.
+O projeto `lumens` está conectado ao repositório `sthefanyblima/lumens`, com `apps/site` como
+diretório do site. Cada merge na `main` dispara um novo build; quando ele termina com sucesso,
+o site é atualizado automaticamente. O status e os logs do deploy ficam no painel da Vercel.
+
+## Bot (parte 2)
 
 ```bash
-pnpm dlx vercel --prod
+pnpm db:up && pnpm db:migrate   # banco com as tabelas do bot
+pnpm dev                        # servidor em :3001 (PORT do .env)
+pnpm sim texto 'buraco no bloco 12'
 ```
+
+O `pnpm dev` valida o ambiente e sobe o Fastify com o webhook da Meta (`GET`/`POST /webhook`)
+e a fila (pg-boss, que cria o próprio schema `pgboss` no banco). O simulador assina com o
+`META_APP_SECRET` do `.env`, então dá para testar o webhook (assinatura, dedup e fila) sem celular
+nem conta Meta: veja [apps/backend/SIMULADOR.md](apps/backend/SIMULADOR.md).
+
+O job de cada mensagem não leva telefone nem wamid em claro (o wamid da Meta codifica o
+telefone): vão como HMAC da `CHAVE_HMAC`, para achar a conversa, e cifrados com a `CHAVE_CIFRA`,
+para o worker responder.
+
+Um worker consome a fila `incoming-message` e anda a conversa. O novo estado, as respostas (na
+fila `outgoing-replies`) e a conclusão do job entram na mesma transação: se o processo cair no
+meio, a mensagem é reentregue em até 1 minuto e aplicada uma vez só. Enquanto o envio pela Meta
+não existe, as respostas aparecem no log do `pnpm dev` como `respostas do bot`, com o texto no
+campo `texto`. Só o `pnpm dev` (flag `--dev`) mostra o texto; o `start` de produção registra
+apenas quantas respostas saíram, porque uma resposta pode repetir o que a pessoa escreveu.
+
+Em produção não há `.env` nem devDependencies: o ambiente vem da hospedagem e o servidor sobe
+com `pnpm --filter @lumens/backend start` (migrações: `pnpm db:migrate`).
+
+Pendências da parte 2:
+
+- Envio das respostas pela API da Meta: trocar o `logSender` (`src/bot/worker.ts`) por um sender
+  que decifra o telefone e chama a Cloud API.
+- Handlers das histórias 2.4, 2.5 e 2.6 são placeholders (`TODO` em
+  `src/bot/conversation/handlers.ts`).
+- Verificar o webhook no painel da Meta e medir resposta < 5 s (critério de pronto da 2.1).
 
 ## Como contribuir
 

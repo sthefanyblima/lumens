@@ -1,0 +1,68 @@
+.pill {
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.875em;
+}
+
+.barra {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.trilho {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--trilho);
+  overflow: hidden;
+}
+
+.preenchimento {
+  height: 100%;
+  background: var(--primaria);
+}
+
+.legenda {
+  font-size: 0.875em;
+  color: var(--tinta-2);
+}
+
+.card {
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 14px var(--espaco);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.contexto {
+  font:
+    600 0.8125em var(--fonte-rotulo),
+    monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primaria-forte);
+}
+
+.titulo {
+  margin: 0;
+  font:
+    700 1.1875em var(--fonte-titulo),
+    sans-serif;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  text-wrap: pretty;
+}
+
+.titulo a {
+  color: var(--tinta);
+  text-decoration: none;
+}
+
+.titulo a:hover {
+  text-decoration: underline;
+}

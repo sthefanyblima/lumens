@@ -1,0 +1,69 @@
+import { sql, type Db, type Tx } from '@lumens/db';
+import type { IncomingMessageJob } from './bot/webhook/process';
+import type { OutgoingReplies } from './bot/worker';
+import { JOBS, StaleJobError, type JobAttempt, type JobQueue, type SendOptions } from './queue';
+
+/**
+ * Fila falsa para os testes. Grava na MESMA transação, em tabelas do próprio PGlite, como o
+ * pg-boss com `fromDrizzle` faz em produção: o rollback desfaz os jobs junto, e o jsonb
+ * recusa o que o Postgres recusaria.
+ */
+export class FakeQueue implements JobQueue {
+  /** Falha DEPOIS de gravar o job: prova que a transação desfaz tudo junto. */
+  failSend = false;
+  /** Falha numa query com o job nos parâmetros, como um erro real do banco faria. */
+  failSendInQuery = false;
+
+  /** Tentativa atual de cada job, como o pg-boss guarda; ausente = a tentativa do chamador. */
+  readonly tentativas = new Map<string, number>();
+
+  /** Chave de ordem de cada job enviado, na ordem do envio. */
+  readonly chaves: (string | undefined)[] = [];
+
+  async send(name: string, data: object, tx: Tx, options?: SendOptions) {
+    this.chaves.push(options?.chave);
+    const json = JSON.stringify(data);
+    await tx.execute(sql`insert into fake_job (name, data) values (${name}, ${json}::jsonb)`);
+    if (this.failSend) throw new Error('fila fora do ar');
+    if (this.failSendInQuery) await tx.execute(sql`select ${json}::int`);
+    return 'job';
+  }
+
+  async complete(name: string, job: JobAttempt, tx: Tx) {
+    const atual = this.tentativas.get(job.id);
+    if (atual !== undefined && atual !== job.retryCount) throw new StaleJobError();
+    await tx.execute(sql`insert into fake_done (name, id) values (${name}, ${job.id})`);
+  }
+}
+
+export async function prepararFilaFalsa(db: Db): Promise<void> {
+  await db.execute(
+    sql`create table fake_job (id serial primary key, name text not null, data jsonb not null)`,
+  );
+  await db.execute(sql`create table fake_done (name text not null, id text not null)`);
+}
+
+// O Db é genérico no driver, então o `execute` volta `unknown`; no PGlite é `{ rows }`.
+async function linhas<T>(db: Db, consulta: ReturnType<typeof sql>): Promise<T[]> {
+  return ((await db.execute(consulta)) as { rows: T[] }).rows;
+}
+
+function consultaDaFila(name: string) {
+  return sql`select data from fake_job where name = ${name} order by id`;
+}
+
+export function mensagensNaFila(db: Db): Promise<{ data: IncomingMessageJob }[]> {
+  return linhas(db, consultaDaFila(JOBS.incomingMessage));
+}
+
+export function respostasNaFila(db: Db): Promise<{ data: OutgoingReplies }[]> {
+  return linhas(db, consultaDaFila(JOBS.outgoingReplies));
+}
+
+export function mortasNaFila(db: Db): Promise<{ data: { job: unknown; erro: unknown } }[]> {
+  return linhas(db, consultaDaFila(JOBS.incomingMessageDead));
+}
+
+export function jobsConcluidos(db: Db): Promise<{ name: string; id: string }[]> {
+  return linhas(db, sql`select name, id from fake_done`);
+}
