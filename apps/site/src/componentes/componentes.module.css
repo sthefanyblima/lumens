@@ -86,3 +86,56 @@
   border: 1px solid var(--borda);
   border-radius: 12px;
 }
+
+.estado {
+  padding: 24px var(--espaco);
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  text-align: center;
+  color: var(--tinta-2);
+}
+
+.estado p {
+  margin: 0 0 8px;
+}
+
+.estadoTitulo {
+  font:
+    700 1.125em var(--fonte-titulo),
+    sans-serif;
+  color: var(--tinta);
+}
+
+.acoes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: var(--espaco);
+}
+
+.botao,
+.botaoSecundario {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.botao {
+  background: var(--primaria-forte);
+  border: 0;
+  color: #fff;
+}
+
+.botaoSecundario {
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  color: var(--primaria-forte);
+}
