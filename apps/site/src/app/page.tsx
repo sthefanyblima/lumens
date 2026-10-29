@@ -1,6 +1,7 @@
 import { formatarNumero } from '../componentes/BarraApoios';
 import { CardPauta } from '../componentes/CardPauta';
 import { FiltroBloco } from '../componentes/FiltroBloco';
+import { ListaVazia } from '../componentes/ListaVazia';
 import exemplo from '../dados/exemplo.json';
 import { blocoDaUrl, pautasPublicas, totais } from '../dados/pautas-publicas';
 import type { DadosExemplo } from '../dados/tipos';
@@ -42,13 +43,17 @@ export default async function Home({
           </div>
         </dl>
       </section>
-      <ul className={estilos.lista}>
-        {lista.map((pauta) => (
-          <li key={pauta.slug}>
-            <CardPauta pauta={pauta} />
-          </li>
-        ))}
-      </ul>
+      {lista.length === 0 ? (
+        <ListaVazia bloco={bloco} />
+      ) : (
+        <ul className={estilos.lista}>
+          {lista.map((pauta) => (
+            <li key={pauta.slug}>
+              <CardPauta pauta={pauta} />
+            </li>
+          ))}
+        </ul>
+      )}
     </main>
   );
 }
