@@ -12,3 +12,7 @@ export type {
   RespostaConferencia,
   ResultadoApuracao,
 } from './conferencia';
+
+export { interpretarResposta } from './conferencia';
+export { registrarRespostaConferencia } from './conferencia-registro';
+export type { MotivoRecusa, RegistroDeResposta, ResultadoRegistro } from './conferencia-registro';

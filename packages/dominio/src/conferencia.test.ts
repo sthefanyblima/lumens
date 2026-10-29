@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { QUORUM_MINIMO, type ContagemRespostas, apurarConferencia } from './conferencia';
+import {
+  QUORUM_MINIMO,
+  type ContagemRespostas,
+  apurarConferencia,
+  interpretarResposta,
+} from './conferencia';
 
 const zero: ContagemRespostas = { sim: 0, em_parte: 0, nao: 0 };
 
@@ -158,5 +163,63 @@ describe('apurarConferencia (RN10)', () => {
     ])('rejeita %s', (_caso, params) => {
       expect(() => apurarConferencia(params)).toThrow(RangeError);
     });
+  });
+});
+describe('interpretarResposta (RF-B17)', () => {
+  it.each([
+    ['sim', 'sim'],
+    ['Sim', 'sim'],
+    ['SIM!', 'sim'],
+    ['s', 'sim'],
+    ['1', 'sim'],
+    ['já foi', 'sim'],
+    ['Foi feito.', 'sim'],
+    ['resolvido', 'sim'],
+  ])('%s → sim', (texto, esperado) => {
+    expect(interpretarResposta(texto)).toBe(esperado);
+  });
+
+  it.each([
+    ['em parte', 'em_parte'],
+    ['Em Parte', 'em_parte'],
+    ['2', 'em_parte'],
+    ['parcialmente', 'em_parte'],
+    ['mais ou menos', 'em_parte'],
+    ['não totalmente', 'em_parte'],
+  ])('%s → em_parte', (texto, esperado) => {
+    expect(interpretarResposta(texto)).toBe(esperado);
+  });
+
+  it.each([
+    ['não', 'nao'],
+    ['nao', 'nao'],
+    ['NÃO', 'nao'],
+    ['n', 'nao'],
+    ['3', 'nao'],
+    ['continua igual', 'nao'],
+  ])('%s → nao', (texto, esperado) => {
+    expect(interpretarResposta(texto)).toBe(esperado);
+  });
+
+  it('"não totalmente" não vira "não"', () => {
+    // Contém "não", mas quem escreve isso está dizendo "em parte".
+    expect(interpretarResposta('não totalmente')).toBe('em_parte');
+  });
+
+  it.each([
+    ['não sei', 'contém "não" mas não é resposta'],
+    ['não entendi', 'contém "não" mas não é resposta'],
+    ['oi', 'nada a ver'],
+    ['talvez', 'não é uma das três'],
+    ['', 'vazio'],
+    ['   ', 'só espaço'],
+    ['sim ou não?', 'pergunta de volta'],
+  ])('%s → null (%s)', (texto) => {
+    expect(interpretarResposta(texto)).toBeNull();
+  });
+
+  it('na dúvida devolve null em vez de chutar', () => {
+    // Registrar a resposta errada de alguém é pior do que perguntar outra vez.
+    expect(interpretarResposta('acho que sim')).toBeNull();
   });
 });
