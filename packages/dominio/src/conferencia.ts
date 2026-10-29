@@ -102,3 +102,65 @@ export function apurarConferencia({ apoiadores, respostas }: ParametrosApuracao)
 
   return { resultado, respondentes, participacao, temQuorum };
 }
+/* -------------------------------------------------------------------------- */
+/* RF-B17 · Captar a resposta do apoiador                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Formas de responder que o bot aceita, por valor.
+ *
+ * Casamento exato depois de normalizar, não busca por pedaço: "não sei" e "não
+ * entendi" contêm "não" e não são resposta nenhuma. Quando nada casa, a função
+ * devolve `null` e quem chama repete a pergunta — melhor perguntar de novo do
+ * que registrar um "não" que a pessoa não deu.
+ *
+ * Os números cobrem a lista de opções do WhatsApp, em que a pessoa costuma
+ * responder digitando o número do item.
+ */
+const FORMAS: Readonly<Record<RespostaConferencia, readonly string[]>> = Object.freeze({
+  sim: ['sim', 's', '1', 'foi', 'foi feito', 'ja foi', 'sim foi', 'feito', 'resolvido', 'resolveu'],
+  em_parte: [
+    'em parte',
+    'em partes',
+    '2',
+    'parte',
+    'parcial',
+    'parcialmente',
+    'mais ou menos',
+    'meio termo',
+    'em parte sim',
+    'nao totalmente',
+    'nao completamente',
+  ],
+  nao: ['nao', 'n', '3', 'nada', 'nao foi', 'nao foi feito', 'negativo', 'continua igual'],
+});
+
+/** Minúsculas, sem acento, sem pontuação nas pontas, espaços colapsados. */
+function normalizarResposta(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * Traduz o que o apoiador escreveu para um valor de resposta.
+ *
+ * Devolve `null` quando não dá para ter certeza. Nunca chuta: registrar a
+ * resposta errada de alguém é pior do que perguntar outra vez.
+ */
+export function interpretarResposta(texto: string): RespostaConferencia | null {
+  const limpo = normalizarResposta(texto);
+  if (limpo === '') return null;
+
+  for (const [valor, formas] of Object.entries(FORMAS) as [
+    RespostaConferencia,
+    readonly string[],
+  ][]) {
+    if (formas.includes(limpo)) return valor;
+  }
+  return null;
+}
