@@ -16,10 +16,12 @@ function disparo(
   destinatario: string,
   minuto = 0,
   entregueEm: Date | null = null,
+  aviso = 'pauta-1',
 ): Disparo {
   return {
     id,
     tipo,
+    aviso,
     destinatario,
     enfileiradoEm: new Date(BASE.getTime() + minuto * 60_000),
     entregueEm,
@@ -27,9 +29,16 @@ function disparo(
 }
 
 /** `n` apoiadores distintos esperando o mesmo aviso. */
-function lote(tipo: TipoDisparo, n: number, minuto = 0): Disparo[] {
+function lote(tipo: TipoDisparo, n: number, minuto = 0, aviso = 'pauta-1'): Disparo[] {
   return Array.from({ length: n }, (_, i) =>
-    disparo(`${tipo}-${String(i).padStart(4, '0')}`, tipo, `estudante-${String(i)}`, minuto),
+    disparo(
+      `${tipo}-${String(i).padStart(4, '0')}`,
+      tipo,
+      `estudante-${String(i)}`,
+      minuto,
+      null,
+      aviso,
+    ),
   );
 }
 
@@ -202,6 +211,76 @@ describe('planejarEnvio (RNF06)', () => {
       const plano = planejarEnvio({ pendentes, orcamentoDiario: 10, jaIniciadasHoje: 0 });
 
       expect(plano.enviarAgora).toHaveLength(2);
+    });
+
+    it('dois avisos do mesmo tipo, de pautas diferentes, para a mesma pessoa saem os dois', () => {
+      // Regressão: enquanto a identidade era só tipo + destinatário, quem
+      // apoiava duas pautas que batiam a meta no mesmo dia recebia aviso de
+      // uma só. O outro não era adiado — desaparecia do plano inteiro, mesmo
+      // com cota sobrando.
+      const pendentes = [
+        disparo('d1', 'meta_batida', 'mesma-pessoa', 0, null, 'pauta-7'),
+        disparo('d2', 'meta_batida', 'mesma-pessoa', 0, null, 'pauta-9'),
+      ];
+
+      const plano = planejarEnvio({ pendentes, orcamentoDiario: 10, jaIniciadasHoje: 0 });
+
+      expect(ids(plano.enviarAgora)).toEqual(['d1', 'd2']);
+      expect(plano.adiados).toHaveLength(0);
+    });
+
+    it('duplicata real do mesmo aviso continua saindo uma só vez', () => {
+      // O contrapeso do teste acima: mesmo tipo, mesmo aviso, mesma pessoa é
+      // duplicata de verdade e não pode cobrar a cota duas vezes.
+      const pendentes = [
+        disparo('d1', 'meta_batida', 'mesma-pessoa', 0, null, 'pauta-7'),
+        disparo('d2', 'meta_batida', 'mesma-pessoa', 5, null, 'pauta-7'),
+      ];
+
+      const plano = planejarEnvio({ pendentes, orcamentoDiario: 10, jaIniciadasHoje: 0 });
+
+      expect(ids(plano.enviarAgora)).toEqual(['d1']);
+      expect(plano.adiados).toHaveLength(0);
+    });
+
+    it.each([
+      ['entregue primeiro', 0],
+      ['entregue depois', 1],
+    ])(
+      'cópia pendente de um aviso já entregue não é reenviada (%s)',
+      (_caso, posicaoDoEntregue) => {
+        // Regressão: o registro entregue era descartado antes de juntar as
+        // duplicatas, então a cópia pendente ficava órfã e saía como se fosse
+        // a primeira vez — mensagem repetida para quem já recebeu e cota paga
+        // duas vezes. O resultado também não pode depender da ordem da lista.
+        const entregue = disparo(
+          'original',
+          'meta_batida',
+          'mesma-pessoa',
+          0,
+          new Date('2026-10-24T08:00:00.000Z'),
+          'pauta-7',
+        );
+        const copia = disparo('copia', 'meta_batida', 'mesma-pessoa', 5, null, 'pauta-7');
+
+        const pendentes = posicaoDoEntregue === 0 ? [entregue, copia] : [copia, entregue];
+        const plano = planejarEnvio({ pendentes, orcamentoDiario: 10, jaIniciadasHoje: 0 });
+
+        expect(plano.enviarAgora).toHaveLength(0);
+        expect(plano.adiados).toHaveLength(0);
+        expect(plano.orcamentoRestante).toBe(10);
+      },
+    );
+
+    it('aviso entregue não bloqueia outro aviso para a mesma pessoa', () => {
+      const pendentes = [
+        disparo('ja', 'meta_batida', 'mesma-pessoa', 0, new Date(BASE), 'pauta-7'),
+        disparo('falta', 'meta_batida', 'mesma-pessoa', 0, null, 'pauta-9'),
+      ];
+
+      const plano = planejarEnvio({ pendentes, orcamentoDiario: 10, jaIniciadasHoje: 0 });
+
+      expect(ids(plano.enviarAgora)).toEqual(['falta']);
     });
   });
 
