@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PAUTAS_TESTE } from './pautas-teste';
-import { pautasPublicas, totais } from './pautas-publicas';
+import exemplo from './exemplo.json';
+import { blocoDaUrl, pautasPublicas, totais } from './pautas-publicas';
 
 describe('pautasPublicas', () => {
   const lista = pautasPublicas(PAUTAS_TESTE);
@@ -44,5 +45,26 @@ describe('totais', () => {
 
   it('lista vazia dá tudo zero', () => {
     expect(totais([])).toEqual({ abertas: 0, apoios: 0, conquistas: 0 });
+  });
+});
+
+describe('filtro por bloco', () => {
+  const { blocos } = exemplo;
+
+  it('acha o bloco do ?bloco=', () => {
+    expect(blocoDaUrl(blocos, 'bloco-a')?.nome).toBe('Bloco A');
+  });
+
+  it('bloco inválido, vazio ou repetido na URL vira "Todos os blocos"', () => {
+    expect(blocoDaUrl(blocos, 'nao-existe')).toBeUndefined();
+    expect(blocoDaUrl(blocos, '')).toBeUndefined();
+    expect(blocoDaUrl(blocos, undefined)).toBeUndefined();
+    expect(blocoDaUrl(blocos, ['bloco-a', 'bloco-b'])).toBeUndefined();
+  });
+
+  it('com bloco, mostra só as pautas públicas daquele bloco', () => {
+    const blocoA = blocoDaUrl(blocos, 'bloco-a');
+    const lista = pautasPublicas(PAUTAS_TESTE, blocoA);
+    expect(lista.map((p) => p.status)).toEqual(['descumprida', 'entregue_em_parte']);
   });
 });
