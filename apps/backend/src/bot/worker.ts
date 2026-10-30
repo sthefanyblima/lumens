@@ -40,28 +40,39 @@ export interface WorkerDeps {
   logger: Logger;
   chaves: Chaves;
   handlers?: HandlerRegistry;
-  /** Espera antes de cada nova tentativa de uma mensagem que falhou (veja INCOMING_RETRY_DELAYS_MS). */
-  retryDelaysMs?: readonly number[];
 }
 
-/**
- * Uma mensagem que falha é tentada de novo ali mesmo, antes da próxima, e não devolvida para o
- * retry do pg-boss: lá ela voltaria depois, com mensagens mais novas do mesmo telefone já
- * aplicadas na frente dela. Esgotadas as tentativas, vai para a fila de mortas e a conversa segue.
- */
-export const INCOMING_RETRY_DELAYS_MS = [250, 1000] as const;
+/** Job da fila de entrada como o worker o recebe (`includeMetadata` traz o `retryLimit`). */
+export type JobDeEntrada = JobAttempt & { retryLimit: number; data: IncomingMessageJob };
+
+/** O job não decifra ou não tem o formato esperado: tentar de novo não muda nada. */
+export class MensagemIlegivelError extends Error {
+  constructor(causa: unknown) {
+    super('O conteúdo do job não pôde ser lido.', { cause: causa });
+    this.name = 'MensagemIlegivelError';
+  }
+}
 
 export const UNSUPPORTED_TEXT = 'Por enquanto eu só entendo mensagens de texto.';
 
 /**
  * Configuração das filas do bot. `notify` acorda o worker na hora em que o job é criado (com o
- * `useListenNotify` do PgBoss); sem isso ele só vê o job no próximo polling. `expireInSeconds`
- * curto: um job que ficou 'active' porque o processo caiu volta para a fila em 1 minuto, não
- * nos 15 do padrão — o processamento de uma mensagem leva milissegundos.
+ * `useListenNotify` do PgBoss); sem isso ele só vê o job no próximo polling.
+ *
+ * Processo caído é detectado pelo heartbeat: o worker renova os jobs que segura a cada 15 s, e um
+ * job sem renovação há 30 s volta para a fila. O `expireInSeconds` fica só como teto para um
+ * processo vivo mas travado. Ele conta desde a busca, para o lote inteiro: com 10 jobs em
+ * sequência e até ~75 s por transação no pior caso (5 consultas × 15 s do `consultaMs`), um teto
+ * de 60 s expirava o fim do lote sem ninguém ter caído.
+ *
+ * Falha passageira volta pelo retry do pg-boss, com backoff (~5, ~10, ~20 s). Numa fila
+ * `key_strict_fifo` o job em `retry` continua sendo a cabeça da conversa, então as mensagens
+ * seguintes do mesmo telefone esperam por ele.
  */
 export const BOT_QUEUE_OPTIONS = {
   notify: true,
-  expireInSeconds: 60,
+  heartbeatSeconds: 30,
+  expireInSeconds: 15 * 60,
   retryLimit: 3,
   retryDelay: 5,
   retryBackoff: true,
@@ -123,7 +134,13 @@ export async function processIncomingJob(
   deps: WorkerDeps,
 ): Promise<string[]> {
   const { data } = job;
-  const input = inputOf(conteudoDoJob(data, deps.chaves));
+  let conteudo: ConteudoMensagem;
+  try {
+    conteudo = conteudoDoJob(data, deps.chaves);
+  } catch (erro) {
+    throw new MensagemIlegivelError(erro);
+  }
+  const input = inputOf(conteudo);
   return deps.db.transaction(async (tx) => {
     const replies =
       input === null
@@ -199,8 +216,6 @@ async function prepareQueue(
   await boss.createQueue(name, policy === 'standard' ? options : { ...options, policy });
 }
 
-const esperar = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 /**
  * Prefixo do HMAC para correlacionar os logs. Não confia no formato do job: um job antigo ou
  * malformado não pode fazer o log lançar, ou o handler cai e o pg-boss falha o lote inteiro.
@@ -210,43 +225,38 @@ function conversaDoLog(data: unknown): string | null {
   return typeof phoneHmac === 'string' ? phoneHmac.slice(0, 12) : null;
 }
 
+/** Erro que se repete em qualquer tentativa: bug do handler ou job que não dá para ler. */
+const erroPermanente = (erro: unknown) =>
+  erro instanceof InvalidTransitionError || erro instanceof MensagemIlegivelError;
+
 /**
- * Roda a mensagem até dar certo, tentando de novo depois de cada espera de `retryDelaysMs`.
- * Transição inválida é bug do handler, não falha passageira: não adianta tentar de novo.
+ * Aplica uma mensagem. Falha passageira (banco fora, timeout) volta para o retry do pg-boss, que
+ * segura a conversa até ela passar (veja BOT_QUEUE_OPTIONS). Erro permanente, ou a última
+ * tentativa, tira a mensagem da frente para a conversa seguir.
  */
-async function processWithRetries(
-  job: JobAttempt & { data: IncomingMessageJob },
-  deps: WorkerDeps,
-): Promise<JobResult> {
-  const delays = deps.retryDelaysMs ?? INCOMING_RETRY_DELAYS_MS;
-  for (let tentativa = 0; ; tentativa++) {
-    try {
-      await processIncomingJob(job, deps);
-      return { id: job.id, status: 'completed' };
-    } catch (erro) {
-      const delay = delays[tentativa];
-      const log = deps.logger.child({ conversa: conversaDoLog(job.data) });
-      if (erro instanceof StaleJobError) {
-        // Outra tentativa é dona do job agora e vai aplicá-lo; o resultado desta não vale mais.
-        log.warn('job expirou durante o processamento; fica para a tentativa nova');
-        return { id: job.id, status: 'failed', output: resumoDoErro(erro) };
-      }
-      if (delay === undefined || erro instanceof InvalidTransitionError) {
-        log.error({ erro: resumoDoErro(erro) }, 'mensagem descartada para a fila de mortas');
-        return descartar(job, erro, deps);
-      }
-      log.warn({ erro: resumoDoErro(erro), tentativa: tentativa + 1 }, 'mensagem falhou');
-      await esperar(delay);
+async function processarMensagem(job: JobDeEntrada, deps: WorkerDeps): Promise<JobResult> {
+  try {
+    await processIncomingJob(job, deps);
+    return { id: job.id, status: 'completed' };
+  } catch (erro) {
+    const log = deps.logger.child({ conversa: conversaDoLog(job.data) });
+    if (erro instanceof StaleJobError) {
+      // Outra tentativa é dona do job agora e vai aplicá-lo; o resultado desta não vale mais.
+      log.warn('job expirou durante o processamento; fica para a tentativa nova');
+      return { id: job.id, status: 'failed', output: resumoDoErro(erro) };
     }
+    if (erroPermanente(erro) || job.retryCount >= job.retryLimit) {
+      log.error({ erro: resumoDoErro(erro) }, 'mensagem descartada para a fila de mortas');
+      return descartar(job, erro, deps);
+    }
+    log.warn(
+      { erro: resumoDoErro(erro), tentativa: job.retryCount + 1 },
+      'mensagem falhou; volta pelo retry do pg-boss',
+    );
+    return { id: job.id, status: 'failed', output: resumoDoErro(erro) };
   }
 }
 
-/**
- * Consome JOBS.incomingMessage, em ordem de chegada, um job por transação. Em sequência, e cada
- * job resolvido (aplicado ou descartado) antes do próximo: mensagens do mesmo telefone precisam
- * ser aplicadas na ordem. A exceção é um job que expira com o processo caído: ele volta pelo
- * retry do pg-boss, depois das mensagens que chegaram enquanto isso.
- */
 /**
  * Tira a mensagem da frente da conversa: copia o job para a fila de mortas e o conclui, numa
  * transação. Não usa o `deadletter` do pg-boss porque, numa fila `key_strict_fifo`, um job
@@ -268,11 +278,13 @@ async function descartar(
     });
     return { id: job.id, status: 'completed', output: { descartada: true } };
   } catch (falha) {
-    // Sem como mover agora (banco fora): fica falhado, e o desbloquearConversas resolve depois.
+    // Sem como mover agora (banco fora): falha comum. Com tentativa sobrando, o pg-boss traz o
+    // job de novo e o descarte é refeito; sem, o pg-boss o copia para a fila de mortas e o
+    // desbloquearConversas o tira da frente.
     deps.logger
       .child({ conversa: conversaDoLog(job.data) })
       .error({ erro: resumoDoErro(falha) }, 'não deu para mover a mensagem para a fila de mortas');
-    return { id: job.id, status: 'deadletter', output: resumoDoErro(erro) };
+    return { id: job.id, status: 'failed', output: resumoDoErro(erro) };
   }
 }
 
@@ -326,7 +338,7 @@ export async function registerIncomingWorker(boss: Boss, deps: WorkerDeps): Prom
     BOT_WORK_OPTIONS,
     async (jobs) => {
       const results: JobResult[] = [];
-      for (const job of emOrdemDeChegada(jobs)) results.push(await processWithRetries(job, deps));
+      for (const job of emOrdemDeChegada(jobs)) results.push(await processarMensagem(job, deps));
       return results;
     },
   );

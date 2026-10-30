@@ -10,10 +10,10 @@ import { criarLogger, resumoDoErro } from './logger';
 import { filaPgBoss } from './queue';
 
 /**
- * Sem limite, um banco travado deixaria a transação de uma mensagem pendurada além dos 60 s do
- * `expireInSeconds`: o job expira e é pego de novo enquanto a primeira tentativa ainda roda.
- * Com estes limites a tentativa falha antes disso (e o `complete` amarrado à tentativa cobre o
- * resto).
+ * Sem limite, um banco travado deixaria a transação de uma mensagem pendurada: o heartbeat segue
+ * (o processo está vivo) e a conversa fica parada até o `expireInSeconds`. Com estes limites a
+ * tentativa falha em segundos e volta pelo retry do pg-boss (e o `complete` amarrado à tentativa
+ * cobre a que expirar mesmo assim).
  */
 const POOL_TIMEOUTS = { conexaoMs: 5_000, consultaMs: 15_000 } as const;
 

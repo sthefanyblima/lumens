@@ -22,9 +22,17 @@ const chaves: Chaves = { cifra: Buffer.alloc(32, 7), hmac: Buffer.alloc(32, 8) }
 const PHONE_HMAC = 'c'.repeat(64);
 const esperar = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Handler de teste: registra cada texto na ordem em que é aplicado e volta ao menu. */
-function registrador(aplicadas: string[], atrasoMs: Record<string, number> = {}): HandlerRegistry {
+/**
+ * Handler de teste: registra cada texto na ordem em que é aplicado e volta ao menu. Um texto em
+ * `falhaUmaVez` lança na primeira vez, como um banco que piscou.
+ */
+function registrador(
+  aplicadas: string[],
+  atrasoMs: Record<string, number> = {},
+  falhaUmaVez = new Set<string>(),
+): HandlerRegistry {
   const handler: StepHandler = async ({ input }) => {
+    if (falhaUmaVez.delete(input.text)) throw new Error('banco piscou');
     await esperar(atrasoMs[input.text] ?? 0);
     aplicadas.push(input.text);
     // 'quebra' pede uma transição inválida: bug do handler, a mensagem vai para a fila de mortas.
@@ -112,7 +120,6 @@ function depsPara(db: Db, boss: PgBoss, handlers: HandlerRegistry) {
     logger: pino({ level: 'silent' }),
     chaves,
     handlers,
-    retryDelaysMs: [0, 0],
   };
 }
 
@@ -148,6 +155,21 @@ describe.skipIf(!URL_TESTE)('worker com Postgres e pg-boss de verdade', () => {
     expect(mortas).toHaveLength(1);
     const pendentes = await a.findJobs(JOBS.incomingMessage, { queued: true });
     expect(pendentes).toHaveLength(0);
+  }, 40_000);
+
+  it('falha passageira volta pelo retry do pg-boss e segura as mensagens seguintes', async () => {
+    const { db, bosses } = await montar(1);
+    const [a] = bosses as [PgBoss];
+    await enfileirar(db, a, ['oi', 'pisca', 'depois']);
+
+    const aplicadas: string[] = [];
+    const handlers = registrador(aplicadas, {}, new Set(['pisca']));
+    await registerIncomingWorker(a, depsPara(db, a, handlers));
+
+    // O retry do pg-boss espera alguns segundos (backoff); 'depois' não passa na frente.
+    await esperarAte(() => aplicadas.includes('depois'));
+    expect(aplicadas).toEqual(['oi', 'pisca', 'depois']);
+    expect(await a.findJobs(JOBS.incomingMessageDead)).toHaveLength(0);
   }, 40_000);
 
   it('job que o pg-boss falhou sozinho (expirou demais) é tirado da frente da conversa', async () => {
