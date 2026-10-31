@@ -24,6 +24,15 @@ describe('pautasPublicas', () => {
     expect(pautasPublicas([antiga, nova]).map((p) => p.slug)).toEqual(['nova', 'antiga']);
   });
 
+  it('no empate, compara o instante e não o texto da data (fusos diferentes)', () => {
+    const [base] = PAUTAS_TESTE.filter((p) => p.status === 'cobrando');
+    if (!base) throw new Error('faltou pauta de teste em cobrando');
+    // 10h em Maceió é 13h UTC: mais recente que 12h UTC, embora o texto venha "antes".
+    const utc = { ...base, slug: 'utc', criada_em: '2026-10-01T12:00:00Z' };
+    const maceio = { ...base, slug: 'maceio', criada_em: '2026-10-01T10:00:00-03:00' };
+    expect(pautasPublicas([utc, maceio]).map((p) => p.slug)).toEqual(['maceio', 'utc']);
+  });
+
   it('não altera a lista original', () => {
     const copia = [...PAUTAS_TESTE];
     pautasPublicas(PAUTAS_TESTE);

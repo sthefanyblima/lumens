@@ -10,7 +10,7 @@ const FORA_DO_SITE: ReadonlySet<StatusPauta> = new Set(['em_curadoria', 'recusad
 export function pautasPublicas(pautas: readonly Pauta[]): Pauta[] {
   return pautas
     .filter((p) => !FORA_DO_SITE.has(p.status))
-    .sort((a, b) => b.apoios - a.apoios || b.criada_em.localeCompare(a.criada_em));
+    .sort((a, b) => b.apoios - a.apoios || Date.parse(b.criada_em) - Date.parse(a.criada_em));
 }
 
 // Ainda correndo: juntando apoios ou cobrando a gestão. Entregue em parte, descumprida e conquistada já encerraram.
