@@ -15,7 +15,7 @@ Oráculo: critérios de aceite do ticket SCRUM-78 registrados em `WORKING_SPEC.m
 - [negativo · integração] **rejeita exclusão de evento sem reduzir a contagem** — oráculo: SQLSTATE `P0001`, mensagem exigida, contagem igual e linha ainda presente — pega: DELETE aceito ou remoção parcial.
 - [operação alternativa · integração] **rejeita TRUNCATE de evento** — oráculo: SQLSTATE `P0001`, mensagem exigida e linhas preservadas — pega: bypass do trigger por limpeza da tabela.
 - [integridade referencial · integração · regressão] **rejeita exclusão de pauta referenciada por evento** — oráculo: SQLSTATE `23503`, constraint `evento_pauta_id_pauta_id_fk`, pauta e evento preservados — pega: FK sem `ON DELETE RESTRICT` ou remoção indireta.
-- [reaplicação · integração · regressão] **reaplica migrações sem duplicar objetos** — oráculo: journal contém exatamente duas migrações e a proteção continua instalada — pega: migração customizada não registrada ou não idempotente no runner.
+- [reaplicação · integração · regressão] **reaplica migrações sem duplicar objetos** — oráculo: banco contém exatamente as entradas do journal versionado e a proteção continua instalada — pega: migração customizada não registrada ou não idempotente no runner.
 
 ## Dimensões não-funcionais (ISO 25010) conferidas
 
@@ -31,8 +31,9 @@ Oráculo: critérios de aceite do ticket SCRUM-78 registrados em `WORKING_SPEC.m
 
 ## Execução e revisão
 
-- `pnpm --filter @lumens/db test`: 47 testes passaram em PostgreSQL real.
-- `pnpm check`: typecheck, lint, formatação e 77 testes passaram.
+- `pnpm --filter @lumens/db test`: 49 testes passaram em PostgreSQL real.
+- Typecheck, lint e formatação passaram; as suítes somaram 287 testes aprovados em execuções
+  separadas. A execução agregada sofreu contenção local, sem falha de asserção.
 - Revisão independente dos testes: aprovada após fortalecer os oráculos de membership, sequência
   futura, saída de sucesso e histórico de migrações.
 - Revisão independente do código: aprovada após completar as instruções de upgrade e rotação.
@@ -68,9 +69,9 @@ Oráculo: critérios de aceite do ticket SCRUM-78 registrados em `WORKING_SPEC.m
 - [compatibilidade futura · integração] **aplica defaults a tabela e sequência futuras** — oráculo:
   objetos criados depois da migração pelo mesmo owner permitem DML/geração de chave sem grant
   adicional — pega: defaults ausentes ou vinculados ao criador errado.
-- [upgrade · integração] **aplica `0002` sobre banco que executou `0000`/`0001`** — oráculo: runner
+- [upgrade · integração] **aplica `0003` sobre banco que executou `0000`/`0001`/`0002`** — oráculo: runner
   histórico real cria o journal, evento sentinela e grants mutáveis adversariais a `PUBLIC`; após
-  `0002`, o evento permanece idêntico, journal ganha uma entrada e privilégios efetivos da
+  `0003`, o evento permanece idêntico, journal ganha uma entrada e privilégios efetivos da
   aplicação/PUBLIC têm os valores exatos — pega: edição retroativa, upgrade destrutivo ou REVOKE
   ausente.
 - [combinações · processo] **exige URL administrativa sem fallback** — oráculo: com arquivos de
@@ -79,10 +80,14 @@ Oráculo: critérios de aceite do ticket SCRUM-78 registrados em `WORKING_SPEC.m
 - [combinações · processo] **usa exclusivamente a URL administrativa** — oráculo: URL de migração
   válida e `DATABASE_URL` inválida ainda aplicam as migrações no banco esperado — pega: variável
   errada no migrador.
-- [configuração · processo] **backend carrega somente `.env`** — oráculo: em layout temporário,
+- [configuração · processo] **runtime do backend carrega somente `.env`** — oráculo: em layout temporário,
   sentinela presente apenas em `.env.database` não aparece em `process.env` ao executar a mesma flag
   do script; o entrypoint real valida o ambiente sem variáveis administrativas e o cliente do banco
   autentica pela URL restrita — pega: carregamento direto/indireto do arquivo admin.
+- [integração · segurança] **opera o PgBoss com o login restrito** — oráculo: `session_user` é
+  `lumens_app`; duas instâncias iniciam com migração e reindexação desativadas, criam as filas e
+  processam jobs após o schema ter sido instalado pelo migrador — pega: runtime dependente de DDL,
+  grant insuficiente ou teste executado acidentalmente como owner.
 - [negativo · processo] **rejeita senha ausente sem mutação** — oráculo: erro específico e papel
   ausente/inalterado — pega: senha padrão implícita ou provisionamento parcial.
 - [segurança · processo] **não revela credenciais em sucesso ou falha** — oráculo: senha sentinela

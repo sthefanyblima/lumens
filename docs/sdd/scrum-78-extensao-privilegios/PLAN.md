@@ -29,8 +29,8 @@ Adicionar uma migração SQL aditiva e versionada após a migração inicial. A 
 
 ## Passos
 
-1. Gerar uma migração customizada Drizzle e preencher o SQL com `bloquear_alteracao_evento()`, `BEFORE UPDATE OR DELETE ... FOR EACH ROW` sem restrição a colunas e `BEFORE TRUNCATE ... FOR EACH STATEMENT`; preservar a FK RESTRICT já existente — `packages/db/migrations/0001_*.sql`, journal/metadados gerados.
-2. Estender a integração em PostgreSQL real com fixture de evento e casos independentes para INSERT, UPDATE, DELETE+contagem, TRUNCATE e DELETE da pauta; atualizar a expectativa do journal para duas migrações — `packages/db/src/schema.test.ts`.
+1. Gerar uma migração customizada Drizzle e preencher o SQL com `bloquear_alteracao_evento()`, `BEFORE UPDATE OR DELETE ... FOR EACH ROW` sem restrição a colunas e `BEFORE TRUNCATE ... FOR EACH STATEMENT`; preservar a FK RESTRICT já existente — `packages/db/migrations/0002_*.sql`, journal/metadados gerados.
+2. Estender a integração em PostgreSQL real com fixture de evento e casos independentes para INSERT, UPDATE, DELETE+contagem, TRUNCATE e DELETE da pauta; comparar o total aplicado com o journal versionado — `packages/db/src/schema.test.ts`.
 3. Criar a documentação operacional append-only e atualizar a referência obsoleta da raiz — `packages/db/README.md`, `README.md`.
 4. Executar os gates proporcionais: migração do zero/reaplicação exercitada pela suíte, `pnpm --filter @lumens/db test`, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`; então fazer revisão independente de testes e código.
 
@@ -96,14 +96,14 @@ O plano detalhado e os oráculos independentes estão em `.agent/working/WORKING
 | UPDATE/DELETE/TRUNCATE revogados     | catálogo retorna `false`; comandos falham em `42501` e preservam evento                                                | 5, 8    | `has_table_privilege` + comandos reais + SELECT administrativo                                     |
 | Trigger preservado para owner        | owner continua falhando em `P0001` e mensagem exata                                                                    | 8       | regressões existentes                                                                              |
 | Objetos futuros                      | tabela e sequência descartáveis criadas pelo owner herdam privilégios para `lumens_app`                                | 5, 8    | teste de default privileges no banco temporário, sem grant manual                                  |
-| Upgrade de volume                    | banco que executou `0000`/`0001` recebe `0002` sem perder evento nem grants indevidos de `PUBLIC`                      | 5, 8    | runner aplica migrações históricas reais, insere sentinela/grant adversarial e então aplica `0002` |
+| Upgrade de volume                    | banco que executou `0000`/`0001`/`0002` recebe `0003` sem perder evento nem grants indevidos de `PUBLIC`               | 5, 8    | runner aplica migrações históricas reais, insere sentinela/grant adversarial e então aplica `0003` |
 | Ambientes e documentação             | backend não carrega admin; Docker/CI provisionam antes de migrar; upgrade local sem reset                              | 6, 7, 9 | testes de scripts/processos, execução dos gates e README                                           |
 
 ### Passos da extensão
 
-5. Criar uma nova migração `0002` — sem editar `0001` — com grants/default privileges para
+5. Criar uma nova migração `0003` — sem editar `0002` — com grants/default privileges para
    `lumens_app`, revogação da exceção de `evento` também para `PUBLIC` e preservação dos dados —
-   `packages/db/migrations/0002_*.sql` e metadados Drizzle.
+   `packages/db/migrations/0003_*.sql` e metadados Drizzle.
 6. Criar lógica Node/TypeScript reaplicável e CLI que provisionam/endurecem `lumens_app`, recusam
    membership/ownership incompatível e sanitizam falhas; fazer `db:migrate` exigir a URL
    administrativa — `packages/db/src/app-role.ts`, `provision-app-role.ts`, `migrate.ts` e scripts.
@@ -111,7 +111,7 @@ O plano detalhado e os oráculos independentes estão em `.agent/working/WORKING
    `db:reset`, pacote e CI para provisionar antes de migrar e nunca carregar o arquivo admin no
    backend — arquivos de configuração raiz e `.github/workflows/ci.yml`.
 8. Estender a suíte PostgreSQL com inspeção de atributos/privilégios, INSERT/SELECT como
-   `lumens_app`, negações reais com `42501`, preservação, default privileges e upgrade `0001→0002`;
+   `lumens_app`, negações reais com `42501`, preservação, default privileges e upgrade `0002→0003`;
    papéis aleatórios isolam criação/rotação sem alterar o login compartilhado. Arquivos de ambiente
    temporários impedem contaminação pelo checkout real; falhas de autenticação exercitam a
    sanitização — testes do db/backend.
@@ -121,22 +121,24 @@ O plano detalhado e os oráculos independentes estão em `.agent/working/WORKING
 ### Impactos e verificação da extensão
 
 - **Compatibilidade:** o conteúdo administrativo do `.env` existente migra para `.env.database`, e
-  `DATABASE_URL` troca para `lumens_app`. `pnpm db:up` provisiona sem apagar o volume; a nova `0002`
-  atualiza bancos que já registraram `0001`.
+  `DATABASE_URL` troca para `lumens_app`. `pnpm db:up` provisiona sem apagar o volume; a nova `0003`
+  atualiza bancos que já registraram `0002`.
 - **Deploy:** provisionar `lumens_app` precede a migração. O migrador deve continuar sendo o mesmo
   owner para que `ALTER DEFAULT PRIVILEGES` alcance objetos futuros.
 - **Segurança:** a aplicação não conhece a URL administrativa, não possui atributos elevados e não
   pode contornar o trigger desabilitando-o. A senha não entra em argv, log ou arquivo versionado;
   falhas de conexão e de estado incompatível também usam diagnóstico sanitizado.
-- **Limite atual:** o backend ainda só valida configuração e não abre conexão de banco. A prova de
-  separação executa esse entrypoint real e o cliente `@lumens/db` com a URL restrita; quando o
-  servidor passar a consultar o banco, seu teste de integração deverá preservar essa identidade.
+- **Integração com filas:** `db:migrate` instala e atualiza o schema `pgboss` como owner; o backend
+  inicia o PgBoss com `migrate: false` e `reindex: false`. O teste de integração autentica como
+  `lumens_app`, inicia duas instâncias, cria filas e processa jobs sem conceder DDL à aplicação.
 - **Rollback:** reverter a conexão da aplicação para o owner restaura o comportamento antigo, mas
   reduz a defesa; grants podem ser removidos em migração própria. O papel não será apagado
   automaticamente para evitar quebrar sessões/deploys.
-- **Gates executados:** `pnpm check` passou em PostgreSQL 17 local em 2026-10-27: typecheck, lint,
-  `format:check` e 77 testes (47 banco, 12 domínio e 18 backend; site sem arquivos de teste).
-  Revisões independentes de testes e código terminaram aprovadas, sem pendências.
+- **Gates executados:** em 2026-11-01, typecheck, lint e formatação passaram; as suítes somaram 287
+  testes aprovados em execuções separadas (49 banco, 66 domínio, 149 backend e 23 site). O backend
+  também subiu com `lumens_app`, supervisão/agendamento ativos e encerrou limpo. A execução agregada
+  sofreu contenção local, sem falha de asserção. Revisões independentes de testes e código aprovaram
+  o resultado sem pendências.
 - **Referências:** documentação oficial do PostgreSQL sobre
   [privilégios](https://www.postgresql.org/docs/current/ddl-priv.html),
   [`CREATE ROLE`](https://www.postgresql.org/docs/current/sql-createrole.html) e

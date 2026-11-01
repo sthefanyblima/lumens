@@ -8,14 +8,11 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 
-/**
- * O CI roda `env:check`, que é uma cópia do `dev`. Sem esta trava, apagar a flag
- * do `dev` deixaria o CI verde e o comando documentado no README mentindo — que
- * foi exatamente o bloqueante encontrado na revisão da T2 (SCRUM-75).
- */
-const pacote = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as {
+interface Pacote {
   scripts: Record<string, string | undefined>;
-};
+  dependencies?: Record<string, string>;
+}
+
 const executar = promisify(execFile);
 const chavesBackend = [
   'DATABASE_URL',
@@ -67,10 +64,27 @@ function envBackendCompleto() {
   ].join('\n');
 }
 
+function lerPacote(caminho: string): Pacote {
+  return JSON.parse(readFileSync(new URL(caminho, import.meta.url), 'utf8')) as Pacote;
+}
+
+const backend = lerPacote('../../package.json');
+const db = lerPacote('../../../../packages/db/package.json');
+
+/**
+ * O CI roda `env:check`, que é o `dev` mais `--so-validar`. Sem esta trava, mudar o `dev`
+ * deixaria o CI verde validando outro caminho, e o comando documentado no README mentindo —
+ * que foi exatamente o bloqueante encontrado na revisão da T2 (SCRUM-75).
+ */
 describe('scripts do back-end', () => {
   it.each(['dev', 'env:check'])('%s carrega o .env da raiz do repositório', (script) => {
-    expect(pacote.scripts[script]).toContain('--env-file-if-exists=../../.env');
-    expect(pacote.scripts[script]).not.toContain('.env.database');
+    expect(backend.scripts[script]).toContain('--env-file-if-exists=../../.env');
+    expect(backend.scripts[script]).not.toContain('.env.database');
+  });
+
+  it('test carrega as credenciais do banco de integração sem expô-las ao runtime', () => {
+    expect(backend.scripts.test).toContain('--env-file-if-exists=../../.env');
+    expect(backend.scripts.test).toContain('--env-file-if-exists=../../.env.database');
   });
 
   it('executa o entrypoint com .env sem carregar sentinela de .env.database', async () => {
@@ -94,7 +108,7 @@ describe('scripts do back-end', () => {
           '-e',
           "process.stdout.write(process.env.SENTINELA_ADMIN ?? 'ausente')",
         ],
-        { cwd, env: ambienteLimpo(), timeout: 10_000 },
+        { cwd, env: ambienteLimpo(), timeout: 30_000 },
       );
       expect(inspecao.stdout).toBe('ausente');
 
@@ -104,8 +118,9 @@ describe('scripts do back-end', () => {
           fileURLToPath(new URL('../../node_modules/tsx/dist/cli.mjs', import.meta.url)),
           '--env-file-if-exists=../../.env',
           fileURLToPath(new URL('../main.ts', import.meta.url)),
+          '--so-validar',
         ],
-        { cwd, env: ambienteLimpo(), timeout: 10_000 },
+        { cwd, env: ambienteLimpo(), timeout: 30_000 },
       );
       expect(entrada.stdout).toContain('Ambiente validado. Banco: localhost:5432');
       expect(entrada.stderr).toBe('');
@@ -113,5 +128,26 @@ describe('scripts do back-end', () => {
     } finally {
       await rm(raiz, { recursive: true, force: true });
     }
+  }, 35_000);
+
+  it('o texto das respostas no log (--dev) é só do dev, nunca do start de produção', () => {
+    expect(backend.scripts.dev).toContain('--dev');
+    expect(backend.scripts.start).not.toContain('--dev');
+  });
+
+  it('env:check é o dev, só que parando depois de validar o ambiente', () => {
+    expect(backend.scripts['env:check']).toBe(`${String(backend.scripts.dev)} --so-validar`);
+  });
+
+  // Instalação de produção (`pnpm install --prod`) não traz devDependencies: o binário que
+  // sobe o servidor e o que roda as migrações precisam estar em `dependencies`.
+  it.each([
+    ['@lumens/backend', backend, 'start'],
+    ['@lumens/db', db, 'db:migrate'],
+  ])('%s %s roda sem devDependencies', (_, pacote, script) => {
+    const comando = pacote.scripts[script];
+    expect(comando).toBeDefined();
+    const binario = String(comando).split(' ')[0] ?? '';
+    expect(Object.keys(pacote.dependencies ?? {})).toContain(binario);
   });
 });

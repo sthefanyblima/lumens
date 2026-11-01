@@ -12,15 +12,22 @@
     {
       "idx": 1,
       "version": "7",
-      "when": 1793061518884,
-      "tag": "0001_evento_append_only",
+      "when": 1793028478551,
+      "tag": "0001_bot_privacidade",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "7",
-      "when": 1793102793452,
-      "tag": "0002_app_role_privileges",
+      "when": 1793329822516,
+      "tag": "0002_evento_append_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793329826614,
+      "tag": "0003_app_role_privileges",
       "breakpoints": true
     }
   ]

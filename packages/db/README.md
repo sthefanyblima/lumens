@@ -39,6 +39,11 @@ O backend usa `DATABASE_URL` com o login restrito `lumens_app`. Provisionamento 
 DML necessário nas demais tabelas, mas não possui `UPDATE`, `DELETE` nem `TRUNCATE` em `evento`.
 Os triggers continuam como proteção independente para acessos administrativos.
 
+O mesmo comando `db:migrate` instala ou atualiza o schema `pgboss` com o owner e concede à
+aplicação apenas os privilégios de operação das filas. O backend inicia o PgBoss sem executar
+migrações nem manutenção DDL; por isso, `db:migrate` deve rodar antes de cada nova versão da
+aplicação que atualize o PgBoss.
+
 Depois de criar ou atualizar `.env.database`:
 
 ```bash

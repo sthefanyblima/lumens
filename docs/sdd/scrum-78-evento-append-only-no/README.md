@@ -30,7 +30,7 @@ PostgreSQL.
 - [x] DELETE falha, mantém a contagem e preserva a linha.
 - [x] TRUNCATE falha e preserva os eventos.
 - [x] DELETE da pauta referenciada falha em `evento_pauta_id_pauta_id_fk` (`23503`).
-- [x] Reaplicação do comando de migração mantém exatamente duas entradas no journal.
+- [x] Reaplicação do comando de migração mantém exatamente as entradas do journal versionado.
 - [x] README do pacote documenta correções por novo evento e reset por recriação do banco.
 - [x] `pnpm check` passou: typecheck, lint, formatação e 57 testes.
 - [x] Revisão independente dos testes aprovada sem ajustes.

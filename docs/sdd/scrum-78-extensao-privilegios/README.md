@@ -32,7 +32,7 @@
 - [x] Login `lumens_app` é provisionado sem atributos elevados e separado do owner/migrador.
 - [x] Privilégios permitem `SELECT`/`INSERT` em `evento` e negam mutações, inclusive via `PUBLIC`.
 - [x] Upgrade incremental, rotação, ambientes local/CI e operação estão documentados.
-- [x] `pnpm check` passou com typecheck, lint, formatação e 77 testes.
+- [x] Typecheck, lint e formatação passaram; 287 testes passaram em execuções separadas.
 - [x] Revisões independentes de testes e código foram aprovadas sem pendências.
 
 ## Desvios do plano aprovado

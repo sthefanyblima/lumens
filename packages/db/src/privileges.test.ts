@@ -17,7 +17,8 @@ const nomeTabelaSegura = /^lumens_test_future_[a-f0-9]{32}$/;
 const nomeSequenciaSegura = /^lumens_test_future_[a-f0-9]{32}_seq$/;
 const hashesMigracoesHistoricas = {
   '0000_fantastic_ulik.sql': '333c233c241e74f54c8ac1c983ff99bac409f5c05283cee0bbc06ae2e52687c5',
-  '0001_evento_append_only.sql': 'df67248b36f260ad80269cb25acab485d49458795b3bc5a1f6c8e70285930aaa',
+  '0001_bot_privacidade.sql': '6131b4c9ff2cf49c00f2dcaed4014a0ccf5cbb3fdd1bf44225c963904e1467e8',
+  '0002_evento_append_only.sql': 'df67248b36f260ad80269cb25acab485d49458795b3bc5a1f6c8e70285930aaa',
 } as const;
 const bancosCriados = new Set<string>();
 const poolsDeBanco: Pool[] = [];
@@ -262,30 +263,32 @@ describe('privilégios do login real da aplicação', () => {
   );
 
   it('permite SELECT, INSERT, UPDATE e DELETE fora de evento', async () => {
-    const wamid = randomUUID();
+    const wamidHmac = randomUUID();
     const instante = new Date('2026-10-27T13:00:00.000Z');
 
-    await poolAplicacao.query('INSERT INTO mensagem_processada (wamid) VALUES ($1)', [wamid]);
-    const inserido = await poolAplicacao.query<{ wamid: string }>(
-      'SELECT wamid FROM mensagem_processada WHERE wamid = $1',
-      [wamid],
-    );
-    expect(inserido.rows).toEqual([{ wamid }]);
-
-    await poolAplicacao.query('UPDATE mensagem_processada SET recebida_em = $1 WHERE wamid = $2', [
-      instante,
-      wamid,
+    await poolAplicacao.query('INSERT INTO mensagem_processada (wamid_hmac) VALUES ($1)', [
+      wamidHmac,
     ]);
+    const inserido = await poolAplicacao.query<{ wamid_hmac: string }>(
+      'SELECT wamid_hmac FROM mensagem_processada WHERE wamid_hmac = $1',
+      [wamidHmac],
+    );
+    expect(inserido.rows).toEqual([{ wamid_hmac: wamidHmac }]);
+
+    await poolAplicacao.query(
+      'UPDATE mensagem_processada SET recebida_em = $1 WHERE wamid_hmac = $2',
+      [instante, wamidHmac],
+    );
     const atualizado = await poolAplicacao.query<{ recebida_em: Date }>(
-      'SELECT recebida_em FROM mensagem_processada WHERE wamid = $1',
-      [wamid],
+      'SELECT recebida_em FROM mensagem_processada WHERE wamid_hmac = $1',
+      [wamidHmac],
     );
     expect(atualizado.rows[0]?.recebida_em).toEqual(instante);
 
-    await poolAplicacao.query('DELETE FROM mensagem_processada WHERE wamid = $1', [wamid]);
+    await poolAplicacao.query('DELETE FROM mensagem_processada WHERE wamid_hmac = $1', [wamidHmac]);
     const removido = await poolAplicacao.query<{ existe: boolean }>(
-      'SELECT EXISTS (SELECT 1 FROM mensagem_processada WHERE wamid = $1) AS existe',
-      [wamid],
+      'SELECT EXISTS (SELECT 1 FROM mensagem_processada WHERE wamid_hmac = $1) AS existe',
+      [wamidHmac],
     );
     expect(removido.rows[0]?.existe).toBe(false);
   });
@@ -361,7 +364,7 @@ describe('separação das URLs no processo de migração', () => {
         const { rows } = await pool.query<{ total: string }>(
           'SELECT count(*) AS total FROM drizzle.__drizzle_migrations',
         );
-        expect(rows[0]?.total).toBe('3');
+        expect(rows[0]?.total).toBe('4');
       } finally {
         await pool.end();
       }
@@ -372,11 +375,11 @@ describe('separação das URLs no processo de migração', () => {
 });
 
 describe('upgrade histórico para a migração de privilégios', () => {
-  it('aplica 0002 após 0000/0001 reais sem alterar evento nem preservar grants adversariais', async () => {
+  it('aplica 0003 após 0000/0001/0002 reais sem alterar evento nem preservar grants adversariais', async () => {
     const banco = await criarBanco('upgrade');
     const urlOwner = urlNoBanco(urlAdministrativaBase, banco);
     const pool = new Pool({ connectionString: urlOwner, connectionTimeoutMillis: 5000 });
-    const pastaHistorica = await mkdtemp(join(tmpdir(), 'lumens-migrations-0001-'));
+    const pastaHistorica = await mkdtemp(join(tmpdir(), 'lumens-migrations-0002-'));
     const metaHistorica = join(pastaHistorica, 'meta');
 
     try {
@@ -390,15 +393,19 @@ describe('upgrade histórico para a migração de privilégios', () => {
         join(pastaHistorica, '0000_fantastic_ulik.sql'),
       );
       await copyFile(
-        join(pastaMigracoes, '0001_evento_append_only.sql'),
-        join(pastaHistorica, '0001_evento_append_only.sql'),
+        join(pastaMigracoes, '0001_bot_privacidade.sql'),
+        join(pastaHistorica, '0001_bot_privacidade.sql'),
+      );
+      await copyFile(
+        join(pastaMigracoes, '0002_evento_append_only.sql'),
+        join(pastaHistorica, '0002_evento_append_only.sql'),
       );
       const journal = JSON.parse(
         await readFile(join(pastaMigracoes, 'meta', '_journal.json'), 'utf8'),
       ) as { version: string; dialect: string; entries: unknown[] };
       await writeFile(
         join(metaHistorica, '_journal.json'),
-        JSON.stringify({ ...journal, entries: journal.entries.slice(0, 2) }),
+        JSON.stringify({ ...journal, entries: journal.entries.slice(0, 3) }),
         'utf8',
       );
 
@@ -407,7 +414,7 @@ describe('upgrade histórico para a migração de privilégios', () => {
       const antesJournal = await pool.query<{ total: string }>(
         'SELECT count(*) AS total FROM drizzle.__drizzle_migrations',
       );
-      expect(antesJournal.rows[0]?.total).toBe('2');
+      expect(antesJournal.rows[0]?.total).toBe('3');
 
       const sentinela = await criarEvento(pool, await criarPauta(pool));
       await pool.query('GRANT UPDATE, DELETE, TRUNCATE ON evento TO PUBLIC');
@@ -417,7 +424,7 @@ describe('upgrade histórico para a migração de privilégios', () => {
       const depoisJournal = await pool.query<{ total: string }>(
         'SELECT count(*) AS total FROM drizzle.__drizzle_migrations',
       );
-      expect(depoisJournal.rows[0]?.total).toBe('3');
+      expect(depoisJournal.rows[0]?.total).toBe('4');
       expect(await buscarEvento(pool, sentinela.id)).toEqual(sentinela);
 
       const { rows: aplicacao } = await pool.query<{

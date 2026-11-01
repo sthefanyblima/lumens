@@ -130,6 +130,26 @@ describe('carregarEnv', () => {
     expect(chaveVazia.DATABASE_URL_TESTE).toBeUndefined();
   });
 
+  it('usa PORT 3001 e LOG_LEVEL info quando ausentes ou vazios', () => {
+    for (const fonte of [ambienteCompleto(), { ...ambienteCompleto(), PORT: '', LOG_LEVEL: '' }]) {
+      const env = carregarEnv(fonte);
+      expect(env.PORT).toBe(3001);
+      expect(env.LOG_LEVEL).toBe('info');
+    }
+  });
+
+  it('converte PORT para número', () => {
+    expect(carregarEnv({ ...ambienteCompleto(), PORT: '8080' }).PORT).toBe(8080);
+  });
+
+  it('recusa PORT que não é número', () => {
+    expect(mensagemDeErro({ ...ambienteCompleto(), PORT: 'oitenta' })).toContain('PORT');
+  });
+
+  it('recusa LOG_LEVEL fora da lista do pino', () => {
+    expect(mensagemDeErro({ ...ambienteCompleto(), LOG_LEVEL: 'verbose' })).toContain('LOG_LEVEL');
+  });
+
   it('preserva opcional preenchida', () => {
     const env = carregarEnv({ ...ambienteCompleto(), S3_ENDPOINT: 'http://localhost:9000' });
 

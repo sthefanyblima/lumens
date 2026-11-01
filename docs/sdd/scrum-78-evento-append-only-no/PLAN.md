@@ -28,8 +28,8 @@ Adicionar uma migração SQL aditiva e versionada após a migração inicial. A 
 
 ## Passos
 
-1. Gerar uma migração customizada Drizzle e preencher o SQL com `bloquear_alteracao_evento()`, `BEFORE UPDATE OR DELETE ... FOR EACH ROW` sem restrição a colunas e `BEFORE TRUNCATE ... FOR EACH STATEMENT`; preservar a FK RESTRICT já existente — `packages/db/migrations/0001_*.sql`, journal/metadados gerados.
-2. Estender a integração em PostgreSQL real com fixture de evento e casos independentes para INSERT, UPDATE, DELETE+contagem, TRUNCATE e DELETE da pauta; atualizar a expectativa do journal para duas migrações — `packages/db/src/schema.test.ts`.
+1. Gerar uma migração customizada Drizzle e preencher o SQL com `bloquear_alteracao_evento()`, `BEFORE UPDATE OR DELETE ... FOR EACH ROW` sem restrição a colunas e `BEFORE TRUNCATE ... FOR EACH STATEMENT`; preservar a FK RESTRICT já existente — `packages/db/migrations/0002_*.sql`, journal/metadados gerados.
+2. Estender a integração em PostgreSQL real com fixture de evento e casos independentes para INSERT, UPDATE, DELETE+contagem, TRUNCATE e DELETE da pauta; comparar o total aplicado com o journal versionado — `packages/db/src/schema.test.ts`.
 3. Criar a documentação operacional append-only e atualizar a referência obsoleta da raiz — `packages/db/README.md`, `README.md`.
 4. Executar os gates proporcionais: migração do zero/reaplicação exercitada pela suíte, `pnpm --filter @lumens/db test`, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`; então fazer revisão independente de testes e código.
 

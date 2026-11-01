@@ -15,7 +15,7 @@ Oráculo: critérios de aceite do ticket SCRUM-78 registrados em `WORKING_SPEC.m
 - [negativo · integração] **rejeita exclusão de evento sem reduzir a contagem** — oráculo: SQLSTATE `P0001`, mensagem exigida, contagem igual e linha ainda presente — pega: DELETE aceito ou remoção parcial.
 - [operação alternativa · integração] **rejeita TRUNCATE de evento** — oráculo: SQLSTATE `P0001`, mensagem exigida e linhas preservadas — pega: bypass do trigger por limpeza da tabela.
 - [integridade referencial · integração · regressão] **rejeita exclusão de pauta referenciada por evento** — oráculo: SQLSTATE `23503`, constraint `evento_pauta_id_pauta_id_fk`, pauta e evento preservados — pega: FK sem `ON DELETE RESTRICT` ou remoção indireta.
-- [reaplicação · integração · regressão] **reaplica migrações sem duplicar objetos** — oráculo: journal contém exatamente duas migrações e a proteção continua instalada — pega: migração customizada não registrada ou não idempotente no runner.
+- [reaplicação · integração · regressão] **reaplica migrações sem duplicar objetos** — oráculo: banco contém exatamente as entradas do journal versionado e a proteção continua instalada — pega: migração customizada não registrada ou não idempotente no runner.
 
 ## Dimensões não-funcionais (ISO 25010) conferidas
 
