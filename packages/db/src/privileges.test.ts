@@ -32,6 +32,15 @@ let poolAplicacao: Pool;
 let urlAdministrativaBase: string;
 let urlAplicacaoBase: string;
 let nomeBancoPrincipal: string;
+let encerrando = false;
+
+function observarErrosDoPool(pool: Pool): Pool {
+  pool.on('error', (erro: Error & { code?: string }) => {
+    if (encerrando && erro.code === '57P01') return;
+    throw erro;
+  });
+  return pool;
+}
 
 type EventoPersistido = {
   id: string;
@@ -182,23 +191,27 @@ beforeAll(async () => {
   }
   urlAdministrativaBase = urlAdmin.toString();
   urlAplicacaoBase = urlApp.toString();
-  administrador = new Pool({
-    connectionString: urlAdministrativaBase,
-    connectionTimeoutMillis: 5000,
-  });
+  administrador = observarErrosDoPool(
+    new Pool({ connectionString: urlAdministrativaBase, connectionTimeoutMillis: 5000 }),
+  );
   poolsAdministrativos.push(administrador);
   nomeBancoPrincipal = await criarBanco('priv');
   const urlOwner = urlNoBanco(urlAdministrativaBase, nomeBancoPrincipal);
   await migrarPorProcesso(urlOwner);
-  poolOwner = new Pool({ connectionString: urlOwner, connectionTimeoutMillis: 5000 });
-  poolAplicacao = new Pool({
-    connectionString: urlNoBanco(urlAplicacaoBase, nomeBancoPrincipal),
-    connectionTimeoutMillis: 5000,
-  });
+  poolOwner = observarErrosDoPool(
+    new Pool({ connectionString: urlOwner, connectionTimeoutMillis: 5000 }),
+  );
+  poolAplicacao = observarErrosDoPool(
+    new Pool({
+      connectionString: urlNoBanco(urlAplicacaoBase, nomeBancoPrincipal),
+      connectionTimeoutMillis: 5000,
+    }),
+  );
   poolsDeBanco.push(poolAplicacao, poolOwner);
 }, 40_000);
 
 afterAll(async () => {
+  encerrando = true;
   for (const pool of poolsDeBanco) await pool.end();
   for (const banco of [...bancosCriados]) await removerBanco(banco);
   for (const pool of poolsAdministrativos) await pool.end();

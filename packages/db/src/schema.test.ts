@@ -218,7 +218,7 @@ describe('migração inicial em Postgres real', () => {
     await expect(
       pool.query('UPDATE evento SET publico = true WHERE id = $1', [registro.id]),
     ).rejects.toMatchObject({ code: 'P0001', message: 'evento é somente inserção' });
-  });
+  }, 20_000);
 
   it('persiste um evento válido com todos os campos da fixture', async () => {
     const registro = await evento(await pauta());
@@ -563,4 +563,4 @@ it('importa o pacote sem configuração de banco nem abertura de conexão', asyn
       timeout: 10_000,
     },
   );
-});
+}, 20_000);

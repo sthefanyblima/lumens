@@ -134,11 +134,10 @@ O plano detalhado e os oráculos independentes estão em `.agent/working/WORKING
 - **Rollback:** reverter a conexão da aplicação para o owner restaura o comportamento antigo, mas
   reduz a defesa; grants podem ser removidos em migração própria. O papel não será apagado
   automaticamente para evitar quebrar sessões/deploys.
-- **Gates executados:** em 2026-11-01, typecheck, lint e formatação passaram; as suítes somaram 287
-  testes aprovados em execuções separadas (49 banco, 66 domínio, 149 backend e 23 site). O backend
-  também subiu com `lumens_app`, supervisão/agendamento ativos e encerrou limpo. A execução agregada
-  sofreu contenção local, sem falha de asserção. Revisões independentes de testes e código aprovaram
-  o resultado sem pendências.
+- **Gates executados:** em 2026-11-01, `pnpm check` passou com typecheck, lint, formatação e 304
+  testes (49 banco, 66 domínio, 152 backend e 37 site). O backend também subiu com `lumens_app`,
+  supervisão/agendamento ativos e encerrou limpo. Revisões independentes de testes e código
+  aprovaram o resultado sem pendências.
 - **Referências:** documentação oficial do PostgreSQL sobre
   [privilégios](https://www.postgresql.org/docs/current/ddl-priv.html),
   [`CREATE ROLE`](https://www.postgresql.org/docs/current/sql-createrole.html) e

@@ -32,8 +32,8 @@ Oráculo: critérios de aceite do ticket SCRUM-78 registrados em `WORKING_SPEC.m
 ## Execução e revisão
 
 - `pnpm --filter @lumens/db test`: 49 testes passaram em PostgreSQL real.
-- Typecheck, lint e formatação passaram; as suítes somaram 287 testes aprovados em execuções
-  separadas. A execução agregada sofreu contenção local, sem falha de asserção.
+- `pnpm check`: typecheck, lint, formatação e 304 testes passaram (49 banco, 66 domínio, 152
+  backend e 37 site).
 - Revisão independente dos testes: aprovada após fortalecer os oráculos de membership, sequência
   futura, saída de sucesso e histórico de migrações.
 - Revisão independente do código: aprovada após completar as instruções de upgrade e rotação.
