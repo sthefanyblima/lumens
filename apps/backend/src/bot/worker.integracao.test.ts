@@ -4,6 +4,7 @@ import { PgBoss } from 'pg-boss';
 import { pino } from 'pino';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cifrar, type Chaves } from '../cripto';
+import { criarPgBossRuntime } from '../pg-boss';
 import { filaPgBoss, JOBS } from '../queue';
 import type { HandlerRegistry, StepHandler } from './conversation/handlers';
 import { STEPS } from './conversation/steps';
@@ -13,10 +14,12 @@ import { desbloquearConversas, prepararFilaDeEntrada, registerIncomingWorker } f
 
 /**
  * Worker com Postgres e pg-boss de verdade, em duas instâncias ao mesmo tempo: é o que o PGlite
- * (uma conexão só) não reproduz. Precisa do `DATABASE_URL_TESTE` (o `pnpm db:up` local e o CI).
+ * (uma conexão só) não reproduz. Precisa das URLs administrativa e restrita do banco local/CI.
  */
 const URL_TESTE = process.env.DATABASE_URL_TESTE;
+const URL_APLICACAO = process.env.DATABASE_URL;
 if (!URL_TESTE && process.env.CI) throw new Error('No CI, defina DATABASE_URL_TESTE.');
+if (!URL_APLICACAO && process.env.CI) throw new Error('No CI, defina DATABASE_URL.');
 
 const chaves: Chaves = { cifra: Buffer.alloc(32, 7), hmac: Buffer.alloc(32, 8) };
 const PHONE_HMAC = 'c'.repeat(64);
@@ -74,11 +77,26 @@ let ambiente: Ambiente | undefined;
 
 async function montar(instancias: number): Promise<Ambiente> {
   if (!URL_TESTE) throw new Error('sem DATABASE_URL_TESTE');
+  if (!URL_APLICACAO) throw new Error('sem DATABASE_URL');
   const banco = await criarBancoTemporario(URL_TESTE);
-  const pool = criarPool(banco.url, { conexaoMs: 5000, consultaMs: 15_000 }, () => undefined);
+  const urlAplicacao = new URL(banco.url);
+  const credenciais = new URL(URL_APLICACAO);
+  urlAplicacao.username = credenciais.username;
+  urlAplicacao.password = credenciais.password;
+  const connectionString = urlAplicacao.toString();
+  const pool = criarPool(
+    connectionString,
+    { conexaoMs: 5000, consultaMs: 15_000 },
+    () => undefined,
+  );
+  const identidade = await pool.query<{ usuario: string }>('SELECT session_user AS usuario');
+  expect(identidade.rows[0]?.usuario).toBe('lumens_app');
   const bosses: PgBoss[] = [];
   for (let i = 0; i < instancias; i++) {
-    const boss = new PgBoss({ connectionString: banco.url, supervise: false, schedule: false });
+    const boss = criarPgBossRuntime(connectionString, {
+      supervise: false,
+      schedule: false,
+    });
     boss.on('error', () => undefined);
     await boss.start();
     bosses.push(boss);

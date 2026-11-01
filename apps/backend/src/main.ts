@@ -1,5 +1,4 @@
 import { criarDb, criarPool } from '@lumens/db';
-import { PgBoss } from 'pg-boss';
 import { registerCleanupJob } from './agendador/limpeza-conversas';
 import { buildApp } from './app';
 import { ConversationStore } from './bot/conversation/store';
@@ -7,6 +6,7 @@ import { logSender, registerIncomingWorker, registerReplyWorker } from './bot/wo
 import { carregarEnv, type Env } from './config/env';
 import { chavesDoEnv } from './cripto';
 import { criarLogger, resumoDoErro } from './logger';
+import { criarPgBossRuntime } from './pg-boss';
 import { filaPgBoss } from './queue';
 
 /**
@@ -55,10 +55,9 @@ async function iniciar(env: Env): Promise<void> {
     });
     const db = criarDb(pool);
 
-    // O pg-boss cria o próprio schema (`pgboss`) no primeiro start. O LISTEN/NOTIFY acorda os
-    // workers das filas com `notify` assim que o job é criado.
-    const boss = new PgBoss({
-      connectionString: env.DATABASE_URL,
+    // `db:migrate` instala/atualiza o schema `pgboss` com a role administrativa. A aplicação
+    // apenas opera as filas; manutenção de índices também fica fora da role restrita.
+    const boss = criarPgBossRuntime(env.DATABASE_URL, {
       useListenNotify: true,
       connectionTimeoutMillis: POOL_TIMEOUTS.conexaoMs,
     });
