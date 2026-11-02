@@ -13,6 +13,7 @@
     "start": "tsx src/main.ts",
     "sim": "tsx --env-file-if-exists=../../.env scripts/sim.ts",
     "fixtures": "tsx scripts/gerar-fixtures.ts",
+    "modelos": "tsx --env-file-if-exists=../../.env scripts/modelos.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.database ../../node_modules/vitest/vitest.mjs run --passWithNoTests"
   },
