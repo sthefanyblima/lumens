@@ -307,6 +307,7 @@ describe('migração inicial em Postgres real', () => {
       ],
       status_proposta: ['aberta', 'executada'],
       tipo_caminho: ['falabr', 'comunidade', 'representante'],
+      tipo_disparo: ['conferencia', 'resposta_oficial', 'meta_batida', 'lembrete'],
     });
   });
 
