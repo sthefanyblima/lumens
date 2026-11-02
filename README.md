@@ -78,11 +78,13 @@ cp .env.database.example .env.database   # ambos só na primeira vez
 pnpm db:up
 ```
 
-| Comando         | O que faz                                                    |
-| --------------- | ------------------------------------------------------------ |
-| `pnpm db:up`    | Sobe o PostgreSQL e provisiona o login restrito da aplicação |
-| `pnpm db:down`  | Derruba o container, preservando os dados                    |
-| `pnpm db:reset` | Apaga o volume, sobe do zero e reprovisiona o login          |
+| Comando         | O que faz                                                         |
+| --------------- | ----------------------------------------------------------------- |
+| `pnpm db:up`    | Sobe o PostgreSQL e provisiona o login restrito da aplicação      |
+| `pnpm db:down`  | Derruba o container, preservando os dados                         |
+| `pnpm db:reset` | Apaga o volume, sobe do zero e reprovisiona o login               |
+| `pnpm db:seed`  | Insere ou completa os dados fictícios de desenvolvimento          |
+| `pnpm db:fresh` | Apaga o volume, migra o banco e aplica o seed em um único comando |
 
 Conferir que o banco respondeu:
 
@@ -99,7 +101,11 @@ criação do volume. Se editar algum deles, use `pnpm db:reset`.
 ```bash
 pnpm db:migrate   # aplica as migrações da aplicação e do pg-boss pela URL administrativa
 pnpm db:generate  # após alterar o schema Drizzle, gera SQL para revisão/versionamento
+pnpm db:seed      # aplica a massa fictícia pela URL restrita da aplicação
 ```
+
+Para reconstruir o ambiente completo com dados para o site e a curadoria, use `pnpm db:fresh`.
+Esse comando é destrutivo: ele remove o volume configurado antes de migrar e popular o banco.
 
 O [contrato do banco](docs/database/schema.md) contém o diagrama ER, campos, status e decisões
 da primeira versão. O esquema e os tipos de leitura/inserção são exportados por `@lumens/db`.
@@ -109,7 +115,8 @@ As migrações SQL e os metadados do Drizzle ficam em `packages/db/migrations/`.
 do ambiente (nome terminado em `_test`) e o administrador `SUPERUSER` do cluster descartável de
 desenvolvimento/CI: além das bases temporárias, os testes criam e removem papéis com atributos
 elevados para provar que o provisionamento os endurece. `CREATEDB` sozinho não basta. O usuário do
-Docker local já permite isso; nunca aponte essa suíte para produção. Seed/`db:fresh` entram na T6.
+Docker local já permite isso; nunca aponte essa suíte para produção. O seed também é exclusivo de
+desenvolvimento e usa apenas contatos fictícios.
 A tabela `evento` é append-only; correções e o reset local estão documentados no
 [README de `@lumens/db`](packages/db/README.md).
 

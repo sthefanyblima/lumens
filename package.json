@@ -19,6 +19,8 @@
     "db:provision": "pnpm --filter @lumens/db db:provision",
     "db:generate": "pnpm --filter @lumens/db db:generate",
     "db:migrate": "pnpm --filter @lumens/db db:migrate",
+    "db:seed": "pnpm --filter @lumens/db db:seed",
+    "db:fresh": "pnpm db:reset && pnpm db:migrate && pnpm db:seed",
     "dev": "pnpm --filter @lumens/backend dev",
     "sim": "pnpm --filter @lumens/backend sim",
     "test": "pnpm -r test",
