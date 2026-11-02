@@ -32,6 +32,22 @@ pnpm db:migrate
 A suíte de integração cria e remove um banco temporário completo; ela não apaga linhas da base de
 desenvolvimento.
 
+## Seed de desenvolvimento
+
+O seed determinístico inclui seis blocos, 300 estudantes fictícios, uma pauta em cada status e os
+relacionamentos necessários para desenvolver o site e o painel de curadoria. Os nomes de blocos
+marcados como fictícios ainda precisam ser conferidos com o mapa da DIACOM.
+
+```bash
+pnpm db:seed   # reaplicável; não apaga dados externos ao seed
+pnpm db:fresh  # destrutivo: reset + migrate + seed
+```
+
+Telefones e e-mails não são reais. Os HMACs são determinísticos e os campos cifrados usam o
+prefixo `seed:v1:` para deixar claro que são placeholders locais; a T17 substituirá esse mecanismo
+pela criptografia da aplicação. As inserções ainda são diretas e devem migrar para os casos de uso
+do domínio quando a T9 os disponibilizar.
+
 ## Papéis e conexões
 
 O backend usa `DATABASE_URL` com o login restrito `lumens_app`. Provisionamento e migrações usam

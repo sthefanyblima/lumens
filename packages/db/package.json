@@ -13,7 +13,8 @@
     "test": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.database ../../node_modules/vitest/vitest.mjs run",
     "db:generate": "drizzle-kit generate",
     "db:provision": "tsx --env-file-if-exists=../../.env.database src/provision-app-role.ts",
-    "db:migrate": "tsx --env-file-if-exists=../../.env.database src/migrate.ts"
+    "db:migrate": "tsx --env-file-if-exists=../../.env.database src/migrate.ts",
+    "db:seed": "tsx --env-file-if-exists=../../.env seed/run.ts"
   },
   "dependencies": {
     "drizzle-orm": "0.45.4",
