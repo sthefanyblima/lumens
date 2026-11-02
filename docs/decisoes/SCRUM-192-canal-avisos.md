@@ -25,9 +25,10 @@ do tempo, então ninguém fica sem a informação, só sem a notificação.
 
 ## Por quê
 
-1. **E-mail não alcança todo mundo.** No esquema, `estudante.email_hmac` é opcional. Quem não deu
-   e-mail precisaria cair no WhatsApp de qualquer forma, e o mesmo aviso passaria a ter dois
-   caminhos, dois textos e dois registros de entrega.
+1. **E-mail não alcança todo mundo.** No esquema, `estudante.email_hmac` é opcional: só tem e-mail
+   quem escolheu "Verificar e-mail" no menu do bot (história 2.4). Quem não verificou precisaria
+   cair no WhatsApp de qualquer forma, e o mesmo aviso passaria a ter dois caminhos, dois textos e
+   dois registros de entrega.
 2. **Os avisos que só informam são o que tira o bot dos 250.** Pela documentação da Meta, um dos
    caminhos para subir a 2.000 é entregar 2.000 mensagens fora da janela de atendimento em 30 dias
    (detalhes na SCRUM-191). Meta batida e resposta oficial são boa parte desse volume. Desviá-los
@@ -36,11 +37,12 @@ do tempo, então ninguém fica sem a informação, só sem a notificação.
    não mensagens. Os avisos de uma mesma pauta saem com semanas de distância, então não se somam
    no mesmo dia. O pico real é o disparo de uma pauta grande (até 300 pessoas), que cabe em dois
    dias a 250 e em um a 2.000.
-4. **E-mail é infraestrutura nova sem dono no sprint.** Exige serviço de envio (SES, na AWS),
-   domínio com SPF e DKIM, pedido de saída do modo sandbox, tratamento de devolução e link de
-   descadastro. Nada disso está planejado, e cada item tem sua própria espera.
-5. **Estudante lê WhatsApp, não e-mail institucional.** O e-mail do cadastro tende a ser o
-   `@*.ufal.br`, que pouca gente abre.
+4. **O SMTP que existe não foi feito para aviso coletivo.** O backend já tem `EMAIL_*` para o
+   código de verificação, que é uma mensagem para quem acabou de pedir. Aviso coletivo é outra
+   coisa: até 300 destinatários de uma vez, limite de envio do provedor, tratamento de devolução e
+   link de descadastro em cada mensagem. Nada disso está planejado no sprint.
+5. **Estudante lê WhatsApp, não e-mail institucional.** O bot pede o e-mail institucional
+   (`@*.ufal.br`), que pouca gente abre no dia a dia.
 
 ## O risco que esta decisão aceita
 
