@@ -44,12 +44,18 @@ function lote(tipo: TipoDisparo, n: number, minuto = 0, aviso = 'pauta-1'): Disp
 
 const ids = (ds: Disparo[]): string[] => ds.map((d) => d.id);
 
+const NINGUEM: ReadonlySet<string> = new Set();
+
+/** `n` pessoas fora dos lotes de teste, já alcançadas nas últimas 24h. */
+const outros = (n: number): ReadonlySet<string> =>
+  new Set(Array.from({ length: n }, (_, i) => `outro-${String(i)}`));
+
 describe('planejarEnvio (RNF06)', () => {
   it('manda tudo quando a cota cobre a fila inteira', () => {
     const plano = planejarEnvio({
       pendentes: lote('meta_batida', 30),
-      orcamentoDiario: ORCAMENTO_SEM_VERIFICACAO,
-      jaIniciadasHoje: 0,
+      limite: ORCAMENTO_SEM_VERIFICACAO,
+      alcancados: NINGUEM,
     });
 
     expect(plano.enviarAgora).toHaveLength(30);
@@ -61,8 +67,8 @@ describe('planejarEnvio (RNF06)', () => {
     // A pauta de meta máxima: 300 apoiadores contra uma cota de 250.
     const plano = planejarEnvio({
       pendentes: lote('meta_batida', 300),
-      orcamentoDiario: ORCAMENTO_SEM_VERIFICACAO,
-      jaIniciadasHoje: 0,
+      limite: ORCAMENTO_SEM_VERIFICACAO,
+      alcancados: NINGUEM,
     });
 
     expect(plano.enviarAgora).toHaveLength(250);
@@ -70,11 +76,11 @@ describe('planejarEnvio (RNF06)', () => {
     expect(plano.orcamentoRestante).toBe(0);
   });
 
-  it('desconta o que o bot já iniciou hoje', () => {
+  it('desconta quem o bot já alcançou nas últimas 24h', () => {
     const plano = planejarEnvio({
       pendentes: lote('meta_batida', 100),
-      orcamentoDiario: ORCAMENTO_SEM_VERIFICACAO,
-      jaIniciadasHoje: 240,
+      limite: ORCAMENTO_SEM_VERIFICACAO,
+      alcancados: outros(240),
     });
 
     expect(plano.enviarAgora).toHaveLength(10);
@@ -84,13 +90,56 @@ describe('planejarEnvio (RNF06)', () => {
   it('cota estourada não vira saldo negativo', () => {
     const plano = planejarEnvio({
       pendentes: lote('lembrete', 5),
-      orcamentoDiario: ORCAMENTO_SEM_VERIFICACAO,
-      jaIniciadasHoje: ORCAMENTO_SEM_VERIFICACAO + 17,
+      limite: ORCAMENTO_SEM_VERIFICACAO,
+      alcancados: outros(ORCAMENTO_SEM_VERIFICACAO + 17),
     });
 
     expect(plano.enviarAgora).toHaveLength(0);
     expect(plano.adiados).toHaveLength(5);
     expect(plano.orcamentoRestante).toBe(0);
+  });
+
+  describe('limite por pessoa, não por mensagem', () => {
+    it('mandar de novo para quem já foi alcançado nas 24h não gasta vaga', () => {
+      // A conferência de 250 pessoas que já receberam a meta batida hoje: a
+      // Meta conta pessoas distintas, então o lote inteiro sai de graça.
+      const jaReceberam = new Set(lote('meta_batida', 250).map((d) => d.destinatario));
+
+      const plano = planejarEnvio({
+        pendentes: lote('conferencia', 250, 0, 'promessa-1'),
+        limite: ORCAMENTO_SEM_VERIFICACAO,
+        alcancados: jaReceberam,
+      });
+
+      expect(plano.enviarAgora).toHaveLength(250);
+      expect(plano.adiados).toHaveLength(0);
+      expect(plano.orcamentoRestante).toBe(0);
+    });
+
+    it('dois avisos para a mesma pessoa no mesmo lote ocupam uma vaga só', () => {
+      const pendentes = [
+        disparo('d1', 'conferencia', 'mesma-pessoa', 0, null, 'promessa-1'),
+        disparo('d2', 'meta_batida', 'mesma-pessoa', 0, null, 'pauta-9'),
+      ];
+
+      const plano = planejarEnvio({ pendentes, limite: 1, alcancados: NINGUEM });
+
+      expect(ids(plano.enviarAgora)).toEqual(['d1', 'd2']);
+      expect(plano.orcamentoRestante).toBe(0);
+    });
+
+    it('com o limite esgotado, só sai o que é de graça, e ninguém perde o lugar', () => {
+      const pendentes = [
+        disparo('conf-a', 'conferencia', 'a', 0, null, 'promessa-1'),
+        disparo('meta-b', 'meta_batida', 'b', 0, null, 'pauta-2'),
+        disparo('lembrete-a', 'lembrete', 'a', 0, null, 'pauta-3'),
+      ];
+
+      const plano = planejarEnvio({ pendentes, limite: 1, alcancados: NINGUEM });
+
+      expect(ids(plano.enviarAgora)).toEqual(['conf-a', 'lembrete-a']);
+      expect(ids(plano.adiados)).toEqual(['meta-b']);
+    });
   });
 
   describe('prioridade', () => {
@@ -103,7 +152,7 @@ describe('planejarEnvio (RNF06)', () => {
         disparo('d2', 'resposta_oficial', 'd', 2),
       ];
 
-      const plano = planejarEnvio({ pendentes, orcamentoDiario: 4, jaIniciadasHoje: 0 });
+      const plano = planejarEnvio({ pendentes, limite: 4, alcancados: NINGUEM });
 
       expect(ids(plano.enviarAgora)).toEqual(['d1', 'd2', 'd3', 'd4']);
     });
@@ -118,8 +167,8 @@ describe('planejarEnvio (RNF06)', () => {
 
       const plano = planejarEnvio({
         pendentes,
-        orcamentoDiario: ORCAMENTO_SEM_VERIFICACAO,
-        jaIniciadasHoje: 0,
+        limite: ORCAMENTO_SEM_VERIFICACAO,
+        alcancados: NINGUEM,
       });
 
       expect(plano.enviarAgora[0]?.id).toBe('conf-1');
@@ -133,7 +182,7 @@ describe('planejarEnvio (RNF06)', () => {
         disparo('cedo', 'meta_batida', 'b', 1),
       ];
 
-      const plano = planejarEnvio({ pendentes, orcamentoDiario: 2, jaIniciadasHoje: 0 });
+      const plano = planejarEnvio({ pendentes, limite: 2, alcancados: NINGUEM });
 
       expect(ids(plano.enviarAgora)).toEqual(['cedo', 'tarde']);
     });
@@ -145,8 +194,8 @@ describe('planejarEnvio (RNF06)', () => {
 
       const plano = planejarEnvio({
         pendentes,
-        orcamentoDiario: tipos.length,
-        jaIniciadasHoje: 0,
+        limite: tipos.length,
+        alcancados: NINGUEM,
       });
 
       expect(plano.enviarAgora).toHaveLength(tipos.length);
@@ -161,7 +210,7 @@ describe('planejarEnvio (RNF06)', () => {
         disparo('falta', 'meta_batida', 'b', 0),
       ];
 
-      const plano = planejarEnvio({ pendentes, orcamentoDiario: 10, jaIniciadasHoje: 0 });
+      const plano = planejarEnvio({ pendentes, limite: 10, alcancados: NINGUEM });
 
       expect(ids(plano.enviarAgora)).toEqual(['falta']);
       expect(plano.adiados).toHaveLength(0);
@@ -172,16 +221,16 @@ describe('planejarEnvio (RNF06)', () => {
 
       const primeiro = planejarEnvio({
         pendentes: todos,
-        orcamentoDiario: ORCAMENTO_SEM_VERIFICACAO,
-        jaIniciadasHoje: 0,
+        limite: ORCAMENTO_SEM_VERIFICACAO,
+        alcancados: NINGUEM,
       });
 
-      // No dia seguinte: os 250 primeiros saíram, a cota zerou.
+      // Passadas 24h: os 250 primeiros saíram e já não ocupam vaga.
       const entregues = new Set(ids(primeiro.enviarAgora));
       const segundo = planejarEnvio({
         pendentes: todos.map((d) => (entregues.has(d.id) ? { ...d, entregueEm: new Date() } : d)),
-        orcamentoDiario: ORCAMENTO_SEM_VERIFICACAO,
-        jaIniciadasHoje: 0,
+        limite: ORCAMENTO_SEM_VERIFICACAO,
+        alcancados: NINGUEM,
       });
 
       expect(segundo.enviarAgora).toHaveLength(50);
@@ -195,7 +244,7 @@ describe('planejarEnvio (RNF06)', () => {
         disparo('dup-cedo', 'meta_batida', 'mesma-pessoa', 0),
       ];
 
-      const plano = planejarEnvio({ pendentes, orcamentoDiario: 10, jaIniciadasHoje: 0 });
+      const plano = planejarEnvio({ pendentes, limite: 10, alcancados: NINGUEM });
 
       expect(plano.enviarAgora).toHaveLength(1);
       // Fica a primeira: a pessoa mantém o lugar que já tinha na fila.
@@ -208,7 +257,7 @@ describe('planejarEnvio (RNF06)', () => {
         disparo('b', 'conferencia', 'mesma-pessoa'),
       ];
 
-      const plano = planejarEnvio({ pendentes, orcamentoDiario: 10, jaIniciadasHoje: 0 });
+      const plano = planejarEnvio({ pendentes, limite: 10, alcancados: NINGUEM });
 
       expect(plano.enviarAgora).toHaveLength(2);
     });
@@ -223,7 +272,7 @@ describe('planejarEnvio (RNF06)', () => {
         disparo('d2', 'meta_batida', 'mesma-pessoa', 0, null, 'pauta-9'),
       ];
 
-      const plano = planejarEnvio({ pendentes, orcamentoDiario: 10, jaIniciadasHoje: 0 });
+      const plano = planejarEnvio({ pendentes, limite: 10, alcancados: NINGUEM });
 
       expect(ids(plano.enviarAgora)).toEqual(['d1', 'd2']);
       expect(plano.adiados).toHaveLength(0);
@@ -237,7 +286,7 @@ describe('planejarEnvio (RNF06)', () => {
         disparo('d2', 'meta_batida', 'mesma-pessoa', 5, null, 'pauta-7'),
       ];
 
-      const plano = planejarEnvio({ pendentes, orcamentoDiario: 10, jaIniciadasHoje: 0 });
+      const plano = planejarEnvio({ pendentes, limite: 10, alcancados: NINGUEM });
 
       expect(ids(plano.enviarAgora)).toEqual(['d1']);
       expect(plano.adiados).toHaveLength(0);
@@ -264,7 +313,7 @@ describe('planejarEnvio (RNF06)', () => {
         const copia = disparo('copia', 'meta_batida', 'mesma-pessoa', 5, null, 'pauta-7');
 
         const pendentes = posicaoDoEntregue === 0 ? [entregue, copia] : [copia, entregue];
-        const plano = planejarEnvio({ pendentes, orcamentoDiario: 10, jaIniciadasHoje: 0 });
+        const plano = planejarEnvio({ pendentes, limite: 10, alcancados: NINGUEM });
 
         expect(plano.enviarAgora).toHaveLength(0);
         expect(plano.adiados).toHaveLength(0);
@@ -278,7 +327,7 @@ describe('planejarEnvio (RNF06)', () => {
         disparo('falta', 'meta_batida', 'mesma-pessoa', 0, null, 'pauta-9'),
       ];
 
-      const plano = planejarEnvio({ pendentes, orcamentoDiario: 10, jaIniciadasHoje: 0 });
+      const plano = planejarEnvio({ pendentes, limite: 10, alcancados: NINGUEM });
 
       expect(ids(plano.enviarAgora)).toEqual(['falta']);
     });
@@ -286,9 +335,8 @@ describe('planejarEnvio (RNF06)', () => {
 
   describe('entradas inválidas', () => {
     it.each([
-      ['orcamentoDiario', { orcamentoDiario: -1, jaIniciadasHoje: 0 }],
-      ['orcamentoDiario fracionário', { orcamentoDiario: 10.5, jaIniciadasHoje: 0 }],
-      ['jaIniciadasHoje', { orcamentoDiario: 10, jaIniciadasHoje: -3 }],
+      ['limite negativo', { limite: -1, alcancados: NINGUEM }],
+      ['limite fracionário', { limite: 10.5, alcancados: NINGUEM }],
     ])('rejeita %s', (_caso, params) => {
       expect(() => planejarEnvio({ pendentes: [], ...params })).toThrow(RangeError);
     });
@@ -296,8 +344,8 @@ describe('planejarEnvio (RNF06)', () => {
     it('fila vazia devolve o orçamento inteiro', () => {
       const plano = planejarEnvio({
         pendentes: [],
-        orcamentoDiario: ORCAMENTO_SEM_VERIFICACAO,
-        jaIniciadasHoje: 0,
+        limite: ORCAMENTO_SEM_VERIFICACAO,
+        alcancados: NINGUEM,
       });
 
       expect(plano.enviarAgora).toHaveLength(0);
@@ -309,7 +357,7 @@ describe('planejarEnvio (RNF06)', () => {
     const pendentes = lote('meta_batida', 3, 0);
     const copia = [...pendentes];
 
-    planejarEnvio({ pendentes, orcamentoDiario: 1, jaIniciadasHoje: 0 });
+    planejarEnvio({ pendentes, limite: 1, alcancados: NINGUEM });
 
     expect(pendentes).toEqual(copia);
   });

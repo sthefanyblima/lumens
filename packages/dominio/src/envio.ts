@@ -1,17 +1,21 @@
 /**
- * RNF06 · Orçamento diário de conversas iniciadas pelo bot.
+ * RNF06 · Limite de pessoas que o bot pode alcançar por conta própria.
  *
- * Sem verificação de empresa, a Meta deixa o bot INICIAR 250 conversas por dia.
+ * A Meta limita quantas PESSOAS DIFERENTES o bot alcança fora da janela de
+ * atendimento numa janela MÓVEL de 24 horas: 250 para um portfólio novo
+ * (SCRUM-191). Não são conversas e não é dia civil — não zera à meia-noite, e
+ * a segunda mensagem para quem já foi alcançado nas últimas 24h não gasta
+ * nada.
+ *
  * A Parte 3 tem três disparos coletivos para a mesma lista ao longo da vida de
- * uma pauta (meta batida, resposta oficial e conferência), então uma pauta com
- * a meta máxima de 300 apoiadores consome ~900 conversas — cerca de quatro dias
- * de cota para uma pauta só. Quando a cota acaba, alguém fica para amanhã, e
- * quem fica é decisão da equipe, não do código: por isso a ordem de prioridade
- * mora aqui, num lugar só, e não espalhada em cada rotina que dispara.
+ * uma pauta (meta batida, resposta oficial e conferência). Uma pauta de meta
+ * máxima tem 300 apoiadores, mais do que cabe em 24h. Quando o limite acaba,
+ * alguém espera, e quem espera é decisão da equipe, não do código: por isso a
+ * ordem de prioridade mora aqui, num lugar só.
  *
- * Este módulo é só a política: decide o que sai hoje e o que espera. A fila em
- * si (tabela, contador persistido e registro de entrega) entra junto com o
- * esquema do banco.
+ * Este módulo é só a política: decide o que sai agora e o que espera. A fila
+ * persistida, que alimenta esta função e guarda o registro de entrega, está em
+ * `fila.ts`.
  */
 
 /** Tipos de disparo que o bot inicia, do mais ao menos urgente. */
@@ -32,7 +36,7 @@ export const PRIORIDADE: Readonly<Record<TipoDisparo, number>> = Object.freeze({
   lembrete: 4,
 });
 
-/** Cota diária da Meta enquanto a empresa não é verificada (RNF06). */
+/** Limite da Meta para um portfólio novo, em pessoas distintas por 24h móveis (RNF06). */
 export const ORCAMENTO_SEM_VERIFICACAO = 250;
 
 export interface Disparo {
@@ -56,28 +60,35 @@ export interface Disparo {
   destinatario: string;
   enfileiradoEm: Date;
   /**
-   * Preenchido quando a Meta confirmou a entrega. Disparo entregue nunca volta
-   * para a fila — é o que garante que um processo que caiu no meio de um lote
-   * não reenvie para quem já recebeu.
+   * Preenchido quando o disparo já saiu. Disparo que saiu nunca volta para a
+   * fila — é o que garante que um processo que caiu no meio de um lote não
+   * reenvie para quem já recebeu.
    */
   entregueEm?: Date | null;
 }
 
 export interface PlanoDeEnvio {
-  /** Cabem na cota de hoje, já na ordem de envio. */
+  /** Cabem no limite agora, já na ordem de envio. */
   enviarAgora: Disparo[];
   /** Não couberam. Voltam ao próximo planejamento, sem perder a ordem. */
   adiados: Disparo[];
-  /** Quanto ainda sobra da cota depois deste lote. */
+  /** Quantas pessoas novas ainda cabem depois deste lote. */
   orcamentoRestante: number;
 }
 
 export interface ParametrosDeEnvio {
   pendentes: readonly Disparo[];
-  /** Normalmente `ORCAMENTO_SEM_VERIFICACAO`; sobe quando a empresa for verificada. */
-  orcamentoDiario: number;
-  /** Conversas que o bot já iniciou hoje, de qualquer tipo. */
-  jaIniciadasHoje: number;
+  /**
+   * Pessoas distintas por 24h móveis. Normalmente `ORCAMENTO_SEM_VERIFICACAO`;
+   * sobe quando a Meta sobe o nível do portfólio.
+   */
+  limite: number;
+  /**
+   * Destinatários que o bot já alcançou nas últimas 24h, de qualquer tipo.
+   * Cada um já ocupa uma vaga do limite, e mandar de novo para ele não ocupa
+   * outra.
+   */
+  alcancados: ReadonlySet<string>;
 }
 
 function exigirInteiroNaoNegativo(valor: number, campo: string): void {
@@ -115,19 +126,14 @@ function ordenar(a: Disparo, b: Disparo): number {
 }
 
 /**
- * Decide quais disparos pendentes cabem na cota de hoje.
+ * Decide quais disparos pendentes cabem no limite agora.
  *
- * Descarta o que já foi entregue, junta duplicatas, ordena por prioridade e
- * corta no orçamento restante. Não envia nada e não toca no banco: devolve o
- * plano para quem chama executar.
+ * Descarta o que já saiu, junta duplicatas, ordena por prioridade e corta no
+ * limite de pessoas. Não envia nada e não toca no banco: devolve o plano para
+ * quem chama executar.
  */
-export function planejarEnvio({
-  pendentes,
-  orcamentoDiario,
-  jaIniciadasHoje,
-}: ParametrosDeEnvio): PlanoDeEnvio {
-  exigirInteiroNaoNegativo(orcamentoDiario, 'orcamentoDiario');
-  exigirInteiroNaoNegativo(jaIniciadasHoje, 'jaIniciadasHoje');
+export function planejarEnvio({ pendentes, limite, alcancados }: ParametrosDeEnvio): PlanoDeEnvio {
+  exigirInteiroNaoNegativo(limite, 'limite');
 
   // Primeira passada só para saber o que a Meta já entregou. Fazer isso antes
   // de juntar duplicatas é o que impede uma cópia pendente de reenviar um aviso
@@ -155,13 +161,27 @@ export function planejarEnvio({
 
   const fila = [...unicos.values()].sort(ordenar);
 
-  // Cota já estourada não vira saldo negativo: hoje simplesmente não sai nada.
-  const cabem = Math.max(0, orcamentoDiario - jaIniciadasHoje);
-  const enviarAgora = fila.slice(0, cabem);
+  // Limite já estourado não vira saldo negativo: só sai o que é de graça.
+  let restante = Math.max(0, limite - alcancados.size);
+  const jaAlcancados = new Set(alcancados);
+  const enviarAgora: Disparo[] = [];
+  const adiados: Disparo[] = [];
 
-  return {
-    enviarAgora,
-    adiados: fila.slice(cabem),
-    orcamentoRestante: cabem - enviarAgora.length,
-  };
+  for (const disparo of fila) {
+    // Quem já foi alcançado nas últimas 24h, ou neste mesmo lote, não ocupa
+    // vaga nova. Por isso um disparo grátis pode sair mesmo depois de o
+    // limite acabar, sem passar na frente de ninguém: ele não tira a vaga de
+    // quem ficou esperando.
+    if (jaAlcancados.has(disparo.destinatario)) {
+      enviarAgora.push(disparo);
+    } else if (restante > 0) {
+      enviarAgora.push(disparo);
+      jaAlcancados.add(disparo.destinatario);
+      restante--;
+    } else {
+      adiados.push(disparo);
+    }
+  }
+
+  return { enviarAgora, adiados, orcamentoRestante: restante };
 }
