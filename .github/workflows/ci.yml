@@ -78,16 +78,19 @@ jobs:
         run: pnpm --filter @lumens/site build
 
       # Mesma fonte usada pelo Docker local.
-      - name: Criar o banco de teste
+      - name: Criar banco de teste e papel da aplicação
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         env:
-          DATABASE_URL: postgresql://lumens:lumens_ci@localhost:5432/lumens
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f docker/init/01-cria-banco-de-teste.sql
+          DATABASE_URL_MIGRACAO: postgresql://lumens:lumens_ci@localhost:5432/lumens
+          POSTGRES_APP_PASSWORD: lumens_app_ci
+        run: |
+          psql "$DATABASE_URL_MIGRACAO" -v ON_ERROR_STOP=1 -f docker/init/01-cria-banco-de-teste.sql
+          pnpm db:provision
 
       - name: Aplicar migrações do zero
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         env:
-          DATABASE_URL: postgresql://lumens:lumens_ci@localhost:5432/lumens
+          DATABASE_URL_MIGRACAO: postgresql://lumens:lumens_ci@localhost:5432/lumens
         run: pnpm db:migrate
 
       # As variáveis de banco ficam NESTE step, não no nível do job: o Node dá
@@ -97,9 +100,11 @@ jobs:
       - name: Testes
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         env:
-          DATABASE_URL: postgresql://lumens:lumens_ci@localhost:5432/lumens
-          DATABASE_URL_LEITURA: postgresql://lumens:lumens_ci@localhost:5432/lumens
+          DATABASE_URL: postgresql://lumens_app:lumens_app_ci@localhost:5432/lumens
+          DATABASE_URL_LEITURA: postgresql://lumens_app:lumens_app_ci@localhost:5432/lumens
+          DATABASE_URL_MIGRACAO: postgresql://lumens:lumens_ci@localhost:5432/lumens
           DATABASE_URL_TESTE: postgresql://lumens:lumens_ci@localhost:5432/lumens_test
+          POSTGRES_APP_PASSWORD: lumens_app_ci
         run: pnpm test
 
       # Nenhum teste unitário pega o carregamento do .env: carregarEnv() recebe a fonte

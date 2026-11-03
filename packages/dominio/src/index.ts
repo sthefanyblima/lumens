@@ -16,3 +16,6 @@ export type {
 export { interpretarResposta } from './conferencia';
 export { registrarRespostaConferencia } from './conferencia-registro';
 export type { MotivoRecusa, RegistroDeResposta, ResultadoRegistro } from './conferencia-registro';
+
+export { ORCAMENTO_SEM_VERIFICACAO, PRIORIDADE, planejarEnvio } from './envio';
+export type { Disparo, ParametrosDeEnvio, PlanoDeEnvio, TipoDisparo } from './envio';

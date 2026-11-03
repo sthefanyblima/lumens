@@ -73,20 +73,23 @@ com PostgreSQL. A documentação completa de operação entra na T21.
 Pré-requisito: **Docker Desktop** aberto e rodando.
 
 ```bash
-cp .env.example .env   # só na primeira vez
+cp .env.example .env
+cp .env.database.example .env.database   # ambos só na primeira vez
 pnpm db:up
 ```
 
-| Comando         | O que faz                                                |
-| --------------- | -------------------------------------------------------- |
-| `pnpm db:up`    | Sobe o PostgreSQL e só retorna quando ele aceita conexão |
-| `pnpm db:down`  | Derruba o container, preservando os dados                |
-| `pnpm db:reset` | Apaga o volume e sobe do zero (recria o `lumens_test`)   |
+| Comando         | O que faz                                                         |
+| --------------- | ----------------------------------------------------------------- |
+| `pnpm db:up`    | Sobe o PostgreSQL e provisiona o login restrito da aplicação      |
+| `pnpm db:down`  | Derruba o container, preservando os dados                         |
+| `pnpm db:reset` | Apaga o volume, sobe do zero e reprovisiona o login               |
+| `pnpm db:seed`  | Insere ou completa os dados fictícios de desenvolvimento          |
+| `pnpm db:fresh` | Apaga o volume, migra o banco e aplica o seed em um único comando |
 
 Conferir que o banco respondeu:
 
 ```bash
-docker compose exec postgres psql -U lumens -d lumens -c 'select 1'
+docker compose --env-file .env.database exec postgres psql -U lumens -d lumens -c 'select 1'
 ```
 
 São dois bancos no mesmo container: `lumens`, para desenvolvimento, e `lumens_test`, para os
@@ -96,27 +99,48 @@ criação do volume. Se editar algum deles, use `pnpm db:reset`.
 ### Esquema e migrações
 
 ```bash
-pnpm db:migrate   # aplica as migrações pendentes em DATABASE_URL; não reseta dados
+pnpm db:migrate   # aplica as migrações da aplicação e do pg-boss pela URL administrativa
 pnpm db:generate  # após alterar o schema Drizzle, gera SQL para revisão/versionamento
+pnpm db:seed      # aplica a massa fictícia pela URL restrita da aplicação
 ```
+
+Para reconstruir o ambiente completo com dados para o site e a curadoria, use `pnpm db:fresh`.
+Esse comando é destrutivo: ele remove o volume configurado antes de migrar e popular o banco.
 
 O [contrato do banco](docs/database/schema.md) contém o diagrama ER, campos, status e decisões
 da primeira versão. O esquema e os tipos de leitura/inserção são exportados por `@lumens/db`.
 As migrações SQL e os metadados do Drizzle ficam em `packages/db/migrations/`.
 
-`pnpm check` agora exige o Postgres local. A suíte usa `DATABASE_URL_TESTE` do `.env` ou do
-ambiente (nome terminado em `_test`) e usuário com `CREATEDB`; cria e remove uma base temporária
-por execução, sem apagar dados de `lumens` ou `lumens_test`. O usuário do Docker já permite isso.
-Não use credenciais de produção nos testes. Seed/`db:fresh` entram na T6; a proteção append-only
-de evento entra na T5.
+`pnpm check` agora exige o Postgres local. A suíte usa `DATABASE_URL_TESTE` do `.env.database` ou
+do ambiente (nome terminado em `_test`) e o administrador `SUPERUSER` do cluster descartável de
+desenvolvimento/CI: além das bases temporárias, os testes criam e removem papéis com atributos
+elevados para provar que o provisionamento os endurece. `CREATEDB` sozinho não basta. O usuário do
+Docker local já permite isso; nunca aponte essa suíte para produção. O seed também é exclusivo de
+desenvolvimento e usa apenas contatos fictícios.
+A tabela `evento` é append-only; correções e o reset local estão documentados no
+[README de `@lumens/db`](packages/db/README.md).
 
 A versão do PostgreSQL é fixada no `docker-compose.yml` e precisa acompanhar a do banco de
 homologação, que será definida na T20.
 
 ### Variáveis de ambiente
 
-Todas as variáveis estão documentadas no `.env.example`, uma a uma. O `.env` é ignorado pelo git
-e nunca deve ser commitado; em produção os segredos vivem no cofre da hospedagem e no CI.
+As variáveis de runtime ficam em `.env.example`; administração, migração e testes ficam em
+`.env.database.example`. Copie-os para `.env` e `.env.database`, respectivamente. Os arquivos reais
+são ignorados pelo git e nunca devem ser commitados. O backend carrega somente `.env`, portanto não
+recebe a URL do owner/migrador; em produção os segredos vivem no cofre da hospedagem e no CI.
+
+Ao atualizar um volume existente, não é preciso apagá-lo:
+
+1. Crie `.env.database` a partir do exemplo e mova para ele toda configuração administrativa:
+   `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`,
+   `POSTGRES_APP_PASSWORD`, `DATABASE_URL_MIGRACAO` e `DATABASE_URL_TESTE`.
+2. Remova essas chaves administrativas do `.env`; o backend carrega esse arquivo.
+3. No `.env`, troque **tanto** `DATABASE_URL` quanto `DATABASE_URL_LEITURA` para o login
+   `lumens_app`, usando a mesma senha definida em `POSTGRES_APP_PASSWORD`.
+4. Rode `pnpm db:up` para provisionar o login e `pnpm db:migrate` para aplicar os privilégios.
+
+Antes de iniciar o backend, confirme que o `.env` não contém mais usuário ou URL de owner/migrador.
 
 `CHAVE_CIFRA` e `CHAVE_HMAC` são **duas chaves diferentes**: uma cifra telefone e e-mail, a
 outra gera o HMAC que permite buscar por telefone sem decifrar a base inteira. Gere cada uma
@@ -157,7 +181,8 @@ pnpm sim texto 'buraco no bloco 12'
 ```
 
 O `pnpm dev` valida o ambiente e sobe o Fastify com o webhook da Meta (`GET`/`POST /webhook`)
-e a fila (pg-boss, que cria o próprio schema `pgboss` no banco). O simulador assina com o
+e a fila. O schema `pgboss` é instalado por `pnpm db:migrate` com a URL administrativa; o backend
+usa somente o login restrito. O simulador assina com o
 `META_APP_SECRET` do `.env`, então dá para testar o webhook (assinatura, dedup e fila) sem celular
 nem conta Meta: veja [apps/backend/SIMULADOR.md](apps/backend/SIMULADOR.md).
 

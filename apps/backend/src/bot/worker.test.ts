@@ -42,6 +42,7 @@ let contador = 0;
 interface JobDeTeste {
   id: string;
   retryCount: number;
+  retryLimit: number;
   createdOn: Date;
   data: IncomingMessageJob;
 }
@@ -51,6 +52,7 @@ function job(content: ConteudoMensagem, type = 'text', phoneHmac = PHONE_HMAC): 
   return {
     id: `job-${String(contador)}`,
     retryCount: 0,
+    retryLimit: BOT_QUEUE_OPTIONS.retryLimit,
     createdOn: new Date(1_700_000_000_000 + contador),
     data: {
       wamidHmac: `w${String(contador)}`,
@@ -85,7 +87,6 @@ beforeEach(async () => {
     queue,
     logger: pino({ level: 'silent' }),
     chaves,
-    retryDelaysMs: [0, 0],
   };
 }, 20_000);
 
@@ -246,7 +247,13 @@ describe('registerIncomingWorker', () => {
     expect(INCOMING_QUEUE_POLICY).toBe('key_strict_fifo');
     expect(chamadas).toContainEqual(['work', JOBS.incomingMessage, BOT_WORK_OPTIONS]);
     expect(chamadas).toContainEqual(['schedule', JOBS.unblockConversations, UNBLOCK_CRON]);
-    expect(BOT_QUEUE_OPTIONS).toMatchObject({ notify: true, expireInSeconds: 60 });
+    expect(BOT_QUEUE_OPTIONS).toMatchObject({ notify: true, retryBackoff: true });
+    // Processo caído volta rápido pelo heartbeat; o teto do expire cobre o lote inteiro no pior
+    // caso (~75 s por transação), senão o fim de um lote lento expira sem ninguém ter caído.
+    expect(BOT_QUEUE_OPTIONS.heartbeatSeconds).toBeLessThanOrEqual(30);
+    expect(BOT_QUEUE_OPTIONS.expireInSeconds).toBeGreaterThanOrEqual(
+      BOT_WORK_OPTIONS.batchSize * 75,
+    );
     expect(BOT_WORK_OPTIONS).toMatchObject({
       burstWhenBatchFull: true,
       perJobResults: true,
@@ -301,10 +308,9 @@ describe('registerIncomingWorker', () => {
     expect((await jobsConcluidos(db)).map((j) => j.id)).toEqual([oi.id, dois.id, titulo.id]);
   });
 
-  it('falha passageira é tentada de novo antes da próxima mensagem, mantendo a ordem', async () => {
+  it('falha passageira volta para o retry do pg-boss, sem ir para as mortas', async () => {
     const { boss, handler } = bossFalso();
     await registerIncomingWorker(boss, deps);
-    await processIncomingJob(texto('oi'), deps);
 
     let falhas = 1;
     const enviar = queue.send.bind(queue);
@@ -312,11 +318,51 @@ describe('registerIncomingWorker', () => {
       if (falhas-- > 0) return Promise.reject(new Error('banco piscou'));
       return enviar(...args);
     };
-    const resultados = await handler(JOBS.incomingMessage)([texto('2'), texto('Bebedouro')]);
+    const pisca = texto('oi');
+    const outra = texto('oi', 'b'.repeat(64));
+    const resultados = await handler(JOBS.incomingMessage)([pisca, outra]);
 
-    expect(statuses(resultados)).toEqual(['completed', 'completed']);
-    // "2" foi aplicado antes de "Bebedouro": a conversa passou por NEW_ASK_TITLE.
-    expect(await passo()).toBe('NEW_ASK_PLACE');
+    // Falhado com tentativa sobrando: o pg-boss o põe em `retry`, e na fila key_strict_fifo ele
+    // segue na frente da conversa. A outra conversa do lote não é afetada.
+    expect(statuses(resultados)).toEqual(['failed', 'completed']);
+    expect(await mortasNaFila(db)).toHaveLength(0);
+    expect(await passo()).toBeUndefined();
+
+    // A tentativa seguinte aplica a mensagem.
+    queue.tentativas.set(pisca.id, 1);
+    const retry = { ...pisca, retryCount: 1 };
+    expect(statuses(await handler(JOBS.incomingMessage)([retry]))).toEqual(['completed']);
+    expect(await passo()).toBe('MENU');
+  });
+
+  it('na última tentativa, a falha passageira vai para a fila de mortas e libera a conversa', async () => {
+    const { boss, handler } = bossFalso();
+    await registerIncomingWorker(boss, deps);
+
+    const enviar = queue.send.bind(queue);
+    queue.send = (name, ...resto) =>
+      name === JOBS.outgoingReplies
+        ? Promise.reject(new Error('banco fora'))
+        : enviar(name, ...resto);
+    const ultima = { ...texto('oi'), retryCount: BOT_QUEUE_OPTIONS.retryLimit };
+    const resultados = (await handler(JOBS.incomingMessage)([ultima])) as {
+      status: string;
+      output?: unknown;
+    }[];
+
+    expect(statuses(resultados)).toEqual(['completed']);
+    expect(resultados[0]?.output).toEqual({ descartada: true });
+    expect(await mortasNaFila(db)).toHaveLength(1);
+  });
+
+  it('sem conseguir mover para as mortas, falha comum: nada de deadletter, que pula o retry', async () => {
+    const { boss, handler } = bossFalso();
+    await registerIncomingWorker(boss, deps);
+
+    queue.send = () => Promise.reject(new Error('banco fora'));
+    const ultima = { ...texto('oi'), retryCount: BOT_QUEUE_OPTIONS.retryLimit };
+
+    expect(statuses(await handler(JOBS.incomingMessage)([ultima]))).toEqual(['failed']);
   });
 
   it('mensagem que sempre falha vai para a fila de mortas sozinha; o resto do lote segue', async () => {
