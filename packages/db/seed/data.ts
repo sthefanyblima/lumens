@@ -560,7 +560,7 @@ export const eventosSeed = configuracoesPauta.flatMap((pauta) => {
       id: uuid(9, ++indiceEvento),
       pautaId: pauta.id,
       tipo: 'pauta_criada',
-      dados: { titulo: pauta.titulo, status: 'em_curadoria' },
+      dados: { status: 'em_curadoria' },
       origem: 'bot',
       publico: false,
       criadoEm: pauta.criadaEm,

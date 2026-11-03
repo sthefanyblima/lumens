@@ -321,6 +321,30 @@ describe('seed completo em Postgres real', () => {
     );
   });
 
+  it.each([
+    'em_curadoria',
+    'recusada',
+    'juntando_apoios',
+    'meta_batida',
+    'cobrando',
+    'prometido',
+    'entregue_em_parte',
+    'descumprida',
+    'conquistada',
+  ] as const)(
+    'mantém somente o payload mínimo de pauta_criada para a pauta em %s',
+    async (status) => {
+      const { rows } = await pool.query<{ dados: Record<string, unknown> }>(
+        `SELECT e.dados
+       FROM evento e JOIN pauta p ON p.id = e.pauta_id
+       WHERE p.status = $1 AND e.tipo = 'pauta_criada'`,
+        [status],
+      );
+
+      expect(rows).toEqual([{ dados: { status: 'em_curadoria' } }]);
+    },
+  );
+
   it('registra os três resultados finais somente após o fechamento das conferências', async () => {
     const { rows } = await pool.query<{ status: string; apos_fechamento: boolean }>(
       `SELECT p.status, e.criado_em > pr.conferencia_fecha_em AS apos_fechamento

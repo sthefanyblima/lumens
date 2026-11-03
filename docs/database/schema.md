@@ -113,8 +113,10 @@ Outros enums: `papel_na_pauta` = owner/co_owner; `origem_apoio` = bot/site;
 `origem_evento` = bot/curadoria/agendador;
 `tipo_disparo` = conferencia/resposta_oficial/meta_batida/lembrete.
 
-`categoria`, `caminho.status`, `promessa.resultado` e `evento.tipo` são textos sem catálogo
-fechado na fonte recebida. Não pressupor valores além dos já acordados em cada integração.
+`categoria`, `caminho.status` e `promessa.resultado` continuam sendo textos sem catálogo fechado.
+`evento.tipo` também permanece `text` no banco, mas seus nomes e sua visibilidade foram fechados no
+[catálogo da T7](../esquema.md#tipos-de-evento-decididos). O domínio deve validar esse contrato; o
+banco ainda não o restringe por enum ou constraint.
 
 ## Índices e invariantes
 
@@ -172,12 +174,14 @@ O CI executa o mesmo SQL de criação do banco de teste usado no Docker e migra 
 antes dos testes. Testes de integração exercitam o runner real da migração e rejeições por
 SQLSTATE e constraint, além da busca, metadados e consumo de tipos pelo domínio.
 
-## Pendências para a equipe
+## Evolução e pendências para a equipe
 
-- T5: bloquear UPDATE, DELETE e TRUNCATE em evento; atualmente a tabela ainda é mutável.
-- T6: seed com blocos e uma pauta por status, além de `db:fresh`.
-- T7: validar diagrama, nulabilidade, enums abertos, resultado/atividade da promessa,
-  nomes dos eventos e rótulos públicos com as partes 2 a 5; registrar os participantes e decisões.
+- T5 concluída: a migration `0002_evento_append_only.sql` bloqueia UPDATE, DELETE e TRUNCATE em
+  `evento`.
+- T6 concluída: `pnpm db:fresh` aplica as migrations e carrega o seed com uma pauta por status.
+- T7 em validação: o [material da apresentação](../esquema.md) consolida o diagrama, status,
+  transições, funções e eventos decididos. Participantes e pedidos devem ser registrados
+  na [ata de decisões](../decisoes.md); enquanto ela estiver pendente, o contrato não está congelado.
 - Confirmar nomes reais dos blocos e base DIACOM antes do seed definitivo.
 - Domínio/agendador: expiração em dez minutos, máximo de tentativas, retenção de 24h,
   máximo de responsáveis ativos e transições. Os campos existem; as rotinas não estão nesta task.
