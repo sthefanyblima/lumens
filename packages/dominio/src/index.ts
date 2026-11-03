@@ -4,6 +4,9 @@ export type { BlocoParaMeta } from './meta';
 export { conferirAnonimato } from './anonimato';
 export type { Achado, MotivoAchado, OpcoesDeConferencia, Severidade, Veredicto } from './anonimato';
 
+export { gerarTextoFalaBr } from './texto-falabr';
+export type { PautaParaTexto, TextoFalaBr } from './texto-falabr';
+
 export {
   PRAZO_INICIAL_DIAS,
   PRAZO_PRORROGACAO_DIAS,
