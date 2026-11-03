@@ -189,6 +189,28 @@ describe('reservarLote (RNF06)', () => {
       expect(resumo(lote)).toEqual([`meta_batida:${b}`]);
     });
 
+    it('as 24h contam do envio quando ele sai depois da reserva', async () => {
+      // Regressão: só a reserva contava. A reservada às 12h e aceita pela Meta
+      // às 12h05 liberava a vaga às 12h01 do dia seguinte, quatro minutos
+      // antes de a Meta deixar de contá-la.
+      const [a, b] = [await estudante(), await estudante()];
+      await enfileirar([aviso('meta_batida', a)], T0);
+      await enfileirar([aviso('meta_batida', b)], depois(1000));
+      const [reservado] = await reservar(1, T0);
+      await db.transaction((tx) =>
+        registrarEnvio(tx, {
+          id: reservado?.id ?? '',
+          wamidHmac: 'w-a',
+          agora: depois(5 * MINUTO),
+        }),
+      );
+
+      expect(await reservar(1, depois(24 * HORA + MINUTO))).toEqual([]);
+
+      const lote = await reservar(1, depois(24 * HORA + 6 * MINUTO));
+      expect(resumo(lote)).toEqual([`meta_batida:${b}`]);
+    });
+
     it('segundo aviso para quem já recebeu nas 24h sai mesmo com o limite cheio', async () => {
       const [a, b] = [await estudante(), await estudante()];
       await enfileirar([aviso('meta_batida', a)]);

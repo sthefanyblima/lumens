@@ -97,10 +97,12 @@ export interface ParametrosDeLote {
 /**
  * Escolhe o próximo lote e o reserva. Devolve os disparos já na ordem de envio.
  *
- * Quem já foi alcançado nas últimas 24h é quem tem reserva nesse período. A
- * reserva conta, e não só o envio confirmado, porque é a reserva que impede o
- * próximo lote de prometer a mesma vaga. O erro, quando há, é para o lado
- * seguro: uma reserva que falhou ainda ocupa a vaga até as 24h passarem.
+ * Quem já foi alcançado nas últimas 24h é quem tem reserva OU envio nesse
+ * período. A reserva conta porque é ela que impede o próximo lote de prometer
+ * a mesma vaga enquanto o envio está em andamento. O envio conta porque é dele
+ * que a Meta mede as 24h, e ele acontece depois da reserva: contar só a
+ * reserva liberaria a vaga minutos antes da hora. O erro, quando há, é para o
+ * lado seguro: uma reserva que falhou ainda ocupa a vaga até as 24h passarem.
  *
  * Precisa rodar dentro de uma transação: o lock é liberado no commit.
  */
@@ -116,7 +118,7 @@ export async function reservarLote(
   const alcancados = await tx
     .selectDistinct({ estudanteId: disparos.estudanteId })
     .from(disparos)
-    .where(gt(disparos.reservadoEm, inicioDaJanela));
+    .where(or(gt(disparos.reservadoEm, inicioDaJanela), gt(disparos.enviadoEm, inicioDaJanela)));
 
   const pendentes = await tx
     .select({

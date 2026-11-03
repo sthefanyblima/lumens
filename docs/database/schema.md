@@ -141,9 +141,9 @@ entrega por pessoa: a linha não é apagada depois de sair. Quem escreve nela é
   enfileirado duas vezes virar uma linha só, mesmo com duas rotinas enfileirando ao mesmo tempo.
 - **Ciclo:** enfileirado → `reservado_em` (um lote pegou) → `enviado_em` (a Meta aceitou) →
   `entregue_em` (o webhook confirmou). `falhou_em` tira da fila o que a Meta recusou de vez.
-- **Limite da Meta:** quem tem `reservado_em` nas últimas 24h já ocupa uma vaga do limite de
-  pessoas distintas. A reserva conta, e não só o envio, para dois lotes simultâneos não passarem do
-  limite.
+- **Limite da Meta:** quem tem `reservado_em` ou `enviado_em` nas últimas 24h já ocupa uma vaga do
+  limite de pessoas distintas. A reserva conta para dois lotes simultâneos não passarem do limite; o
+  envio conta porque é dele que a Meta mede as 24h, e ele acontece depois da reserva.
 - **`parametros`** guarda os valores das variáveis da mensagem modelo. Só dado público da pauta;
   quem recebe sai do `estudante_id`.
 
