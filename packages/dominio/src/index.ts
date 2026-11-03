@@ -19,3 +19,6 @@ export type {
   RegistroDeProtocolo,
   ResultadoProtocolo,
 } from './caminho-registro';
+
+export { ORCAMENTO_SEM_VERIFICACAO, PRIORIDADE, planejarEnvio } from './envio';
+export type { Disparo, ParametrosDeEnvio, PlanoDeEnvio, TipoDisparo } from './envio';
