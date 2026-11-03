@@ -5,10 +5,26 @@
   "description": "Esquema, migrações, views e seed do PostgreSQL (parte 1).",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./teste": "./src/teste.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.database ../../node_modules/vitest/vitest.mjs run",
+    "db:generate": "drizzle-kit generate",
+    "db:provision": "tsx --env-file-if-exists=../../.env.database src/provision-app-role.ts",
+    "db:migrate": "tsx --env-file-if-exists=../../.env.database src/migrate.ts",
+    "db:seed": "tsx --env-file-if-exists=../../.env seed/run.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.4",
+    "pg": "8.23.1",
+    "pg-boss": "^12.38.0",
+    "tsx": "4.23.15"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11",
+    "@types/pg": "^8.15.5",
+    "drizzle-kit": "0.31.11"
   }
 }

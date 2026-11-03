@@ -1,0 +1,39 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "200000000000002",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "558230000000",
+              "phone_number_id": "100000000000001"
+            },
+            "contacts": [
+              {
+                "profile": {
+                  "name": "Morador Simulado"
+                },
+                "wa_id": "5582999990000"
+              }
+            ],
+            "messages": [
+              {
+                "id": "wamid.FIXTURE_TEXTO",
+                "from": "5582999990000",
+                "timestamp": "1767225600",
+                "type": "text",
+                "text": {
+                  "body": "buraco no bloco 12"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -15,6 +15,7 @@ coverage/
 .env
 .env.*
 !.env.example
+!.env.database.example
 
 # Logs
 *.log
@@ -29,3 +30,8 @@ Thumbs.db
 !.vscode/extensions.json
 !.vscode/settings.json
 .vercel
+
+# Tour (edge-tour) — estado de sessão e config pessoal
+.agent/working/
+.agent/policy.local.yaml
+docs/sdd/**/*.bak-*
