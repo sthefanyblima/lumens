@@ -141,6 +141,33 @@ describe('registrarProtocolo (SCRUM-215)', () => {
       expect(r).toMatchObject({ registrado: true, jaEstava: true });
     });
 
+    it('protocolos que só diferem nas letras não contam como o mesmo', async () => {
+      const id = await montarCaminho();
+      await registrar({ caminhoId: id, protocolo: 'OUV-2026-004512', abertoEm: ABERTO_EM });
+
+      const r = await registrar({
+        caminhoId: id,
+        protocolo: 'LAI-2026-004512',
+        abertoEm: ABERTO_EM,
+      });
+
+      expect(r).toEqual({ registrado: false, motivo: 'protocolo_divergente' });
+      expect((await lerCaminho(id))?.protocolo).toBe('OUV-2026-004512');
+    });
+
+    it('mesmo protocolo com letras em outra caixa é reenvio', async () => {
+      const id = await montarCaminho();
+      await registrar({ caminhoId: id, protocolo: 'OUV-2026-004512', abertoEm: ABERTO_EM });
+
+      const r = await registrar({
+        caminhoId: id,
+        protocolo: 'ouv 2026 004512',
+        abertoEm: ABERTO_EM,
+      });
+
+      expect(r).toMatchObject({ registrado: true, jaEstava: true });
+    });
+
     it('número diferente é recusado em vez de sobrescrever', async () => {
       // O protocolo liga a pauta a uma manifestação real; trocá-lo calado
       // perderia o vínculo sem deixar rastro.

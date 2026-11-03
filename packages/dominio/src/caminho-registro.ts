@@ -52,9 +52,12 @@ function arrumarProtocolo(bruto: string): string {
   return bruto.replace(/\s+/g, ' ').trim();
 }
 
-/** Comparação que ignora a pontuação do NUP, que varia conforme de onde se copia. */
-function soDigitos(protocolo: string): string {
-  return protocolo.replace(/\D/g, '');
+/**
+ * Chave de comparação que ignora a pontuação do NUP, que varia conforme de onde se copia.
+ * Mantém as letras: `OUV-2026-004512` e `LAI-2026-004512` são protocolos diferentes.
+ */
+function chaveDoProtocolo(protocolo: string): string {
+  return protocolo.replace(/[^0-9a-z]/gi, '').toUpperCase();
 }
 
 /** Teto generoso: o NUP tem 17 dígitos, e o resto é pontuação. */
@@ -85,7 +88,7 @@ export async function registrarProtocolo(
   { caminhoId, protocolo, abertoEm, prorrogado = false }: RegistroDeProtocolo,
 ): Promise<ResultadoProtocolo> {
   const limpo = arrumarProtocolo(protocolo);
-  if (limpo === '' || soDigitos(limpo) === '' || limpo.length > TAMANHO_MAXIMO) {
+  if (limpo === '' || !/\d/.test(limpo) || limpo.length > TAMANHO_MAXIMO) {
     return { registrado: false, motivo: 'protocolo_invalido' };
   }
 
@@ -104,7 +107,7 @@ export async function registrarProtocolo(
   }
 
   if (caminho.protocolo !== null) {
-    if (soDigitos(caminho.protocolo) !== soDigitos(limpo)) {
+    if (chaveDoProtocolo(caminho.protocolo) !== chaveDoProtocolo(limpo)) {
       return { registrado: false, motivo: 'protocolo_divergente' };
     }
     return {
@@ -146,7 +149,7 @@ export async function registrarProtocolo(
 
   if (atual?.protocolo == null) return { registrado: false, motivo: 'caminho_inexistente' };
 
-  return soDigitos(atual.protocolo) === soDigitos(limpo)
+  return chaveDoProtocolo(atual.protocolo) === chaveDoProtocolo(limpo)
     ? { registrado: true, protocolo: atual.protocolo, prazo: atual.prazo, jaEstava: true }
     : { registrado: false, motivo: 'protocolo_divergente' };
 }
