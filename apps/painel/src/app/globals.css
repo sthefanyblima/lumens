@@ -1,0 +1,25 @@
+:root {
+  --fundo: #e7e1f2;
+  --superficie: #fff;
+  --tinta: #1e1433;
+  --tinta-secundaria: #5b4e75;
+  --borda: #d9d0ea;
+  --primaria: #5a22c8;
+  --destaque-suave: #f1ecf9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--tinta);
+  font-family: Inter, system-ui, sans-serif;
+}
+
+:focus-visible {
+  outline: 3px solid var(--primaria);
+  outline-offset: 2px;
+}
