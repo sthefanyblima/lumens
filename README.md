@@ -12,7 +12,7 @@ Projeto da disciplina Projeto e Desenvolvimento de Sistemas (PDS) · IC · UFAL.
 
 - **Back-end:** Node.js + TypeScript (bot, agendador e API num serviço só)
 - **Banco:** PostgreSQL
-- **Site:** Next.js
+- **Site e painel:** dois apps Next.js separados
 - **Nuvem:** AWS
 - **Monorepo:** pnpm workspaces · **Testes:** Vitest · **Qualidade:** ESLint + Prettier
 
@@ -25,7 +25,8 @@ lumens/
 │   │   ├── src/bot/        webhook da Meta e conversas      (partes 2 e 3)
 │   │   ├── src/agendador/  rotinas por data                 (parte 3)
 │   │   └── src/api/        leitura pública e curadoria      (partes 1 e 5)
-│   └── site/             Next.js: site público e painel     (partes 4 e 5)
+│   ├── site/             Next.js: site público              (parte 4)
+│   └── painel/           Next.js: painel de curadoria       (parte 5)
 ├── docker/init/          scripts SQL do banco local         (parte 1)
 └── packages/
     ├── db/               esquema, migrações, views, seed    (parte 1)
@@ -171,6 +172,19 @@ Até o ambiente da AWS (1.1b), o site é publicado na Vercel pela integração c
 O projeto `lumens` está conectado ao repositório `sthefanyblima/lumens`, com `apps/site` como
 diretório do site. Cada merge na `main` dispara um novo build; quando ele termina com sucesso,
 o site é atualizado automaticamente. O status e os logs do deploy ficam no painel da Vercel.
+
+## Painel de curadoria
+
+O painel é um app separado do site público. Esta base ainda não autentica nem permite ações de
+curadoria; o login por link no e-mail entra na SCRUM-164.
+
+```bash
+pnpm --filter @lumens/painel dev     # http://localhost:3002
+pnpm --filter @lumens/painel build   # build de produção
+```
+
+Na Vercel, o projeto do painel usa `apps/painel` como diretório raiz. Assim, site e painel têm
+deploys e configurações independentes mesmo compartilhando o monorepo.
 
 ## Bot (parte 2)
 

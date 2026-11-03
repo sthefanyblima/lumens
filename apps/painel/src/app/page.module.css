@@ -1,0 +1,46 @@
+.pagina {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+
+.cartao {
+  width: min(100%, 520px);
+  padding: clamp(32px, 8vw, 56px);
+  border: 1px solid var(--borda);
+  border-radius: 20px;
+  background: var(--superficie);
+  box-shadow: 0 20px 60px rgb(30 20 51 / 12%);
+}
+
+.marca {
+  margin: 0 0 12px;
+  color: var(--primaria);
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.cartao h1 {
+  margin: 0;
+  font-size: clamp(2rem, 7vw, 3rem);
+  line-height: 1.05;
+}
+
+.descricao {
+  margin: 20px 0 0;
+  color: var(--tinta-secundaria);
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+
+.estado {
+  margin: 32px 0 0;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--destaque-suave);
+  color: var(--tinta);
+  line-height: 1.5;
+}

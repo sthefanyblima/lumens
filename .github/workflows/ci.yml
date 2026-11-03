@@ -77,6 +77,10 @@ jobs:
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         run: pnpm --filter @lumens/site build
 
+      - name: Build do painel
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
+        run: pnpm --filter @lumens/painel build
+
       # Mesma fonte usada pelo Docker local.
       - name: Criar banco de teste e papel da aplicação
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
