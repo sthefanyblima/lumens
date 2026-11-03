@@ -4,6 +4,7 @@ import { PgBoss } from 'pg-boss';
 import { pino } from 'pino';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cifrar, type Chaves } from '../cripto';
+import { criarPgBossRuntime } from '../pg-boss';
 import { filaPgBoss, JOBS } from '../queue';
 import type { HandlerRegistry, StepHandler } from './conversation/handlers';
 import { STEPS } from './conversation/steps';
@@ -13,18 +14,28 @@ import { desbloquearConversas, prepararFilaDeEntrada, registerIncomingWorker } f
 
 /**
  * Worker com Postgres e pg-boss de verdade, em duas instâncias ao mesmo tempo: é o que o PGlite
- * (uma conexão só) não reproduz. Precisa do `DATABASE_URL_TESTE` (o `pnpm db:up` local e o CI).
+ * (uma conexão só) não reproduz. Precisa das URLs administrativa e restrita do banco local/CI.
  */
 const URL_TESTE = process.env.DATABASE_URL_TESTE;
+const URL_APLICACAO = process.env.DATABASE_URL;
 if (!URL_TESTE && process.env.CI) throw new Error('No CI, defina DATABASE_URL_TESTE.');
+if (!URL_APLICACAO && process.env.CI) throw new Error('No CI, defina DATABASE_URL.');
 
 const chaves: Chaves = { cifra: Buffer.alloc(32, 7), hmac: Buffer.alloc(32, 8) };
 const PHONE_HMAC = 'c'.repeat(64);
 const esperar = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Handler de teste: registra cada texto na ordem em que é aplicado e volta ao menu. */
-function registrador(aplicadas: string[], atrasoMs: Record<string, number> = {}): HandlerRegistry {
+/**
+ * Handler de teste: registra cada texto na ordem em que é aplicado e volta ao menu. Um texto em
+ * `falhaUmaVez` lança na primeira vez, como um banco que piscou.
+ */
+function registrador(
+  aplicadas: string[],
+  atrasoMs: Record<string, number> = {},
+  falhaUmaVez = new Set<string>(),
+): HandlerRegistry {
   const handler: StepHandler = async ({ input }) => {
+    if (falhaUmaVez.delete(input.text)) throw new Error('banco piscou');
     await esperar(atrasoMs[input.text] ?? 0);
     aplicadas.push(input.text);
     // 'quebra' pede uma transição inválida: bug do handler, a mensagem vai para a fila de mortas.
@@ -66,11 +77,26 @@ let ambiente: Ambiente | undefined;
 
 async function montar(instancias: number): Promise<Ambiente> {
   if (!URL_TESTE) throw new Error('sem DATABASE_URL_TESTE');
+  if (!URL_APLICACAO) throw new Error('sem DATABASE_URL');
   const banco = await criarBancoTemporario(URL_TESTE);
-  const pool = criarPool(banco.url, { conexaoMs: 5000, consultaMs: 15_000 }, () => undefined);
+  const urlAplicacao = new URL(banco.url);
+  const credenciais = new URL(URL_APLICACAO);
+  urlAplicacao.username = credenciais.username;
+  urlAplicacao.password = credenciais.password;
+  const connectionString = urlAplicacao.toString();
+  const pool = criarPool(
+    connectionString,
+    { conexaoMs: 5000, consultaMs: 15_000 },
+    () => undefined,
+  );
+  const identidade = await pool.query<{ usuario: string }>('SELECT session_user AS usuario');
+  expect(identidade.rows[0]?.usuario).toBe('lumens_app');
   const bosses: PgBoss[] = [];
   for (let i = 0; i < instancias; i++) {
-    const boss = new PgBoss({ connectionString: banco.url, supervise: false, schedule: false });
+    const boss = criarPgBossRuntime(connectionString, {
+      supervise: false,
+      schedule: false,
+    });
     boss.on('error', () => undefined);
     await boss.start();
     bosses.push(boss);
@@ -112,7 +138,6 @@ function depsPara(db: Db, boss: PgBoss, handlers: HandlerRegistry) {
     logger: pino({ level: 'silent' }),
     chaves,
     handlers,
-    retryDelaysMs: [0, 0],
   };
 }
 
@@ -148,6 +173,21 @@ describe.skipIf(!URL_TESTE)('worker com Postgres e pg-boss de verdade', () => {
     expect(mortas).toHaveLength(1);
     const pendentes = await a.findJobs(JOBS.incomingMessage, { queued: true });
     expect(pendentes).toHaveLength(0);
+  }, 40_000);
+
+  it('falha passageira volta pelo retry do pg-boss e segura as mensagens seguintes', async () => {
+    const { db, bosses } = await montar(1);
+    const [a] = bosses as [PgBoss];
+    await enfileirar(db, a, ['oi', 'pisca', 'depois']);
+
+    const aplicadas: string[] = [];
+    const handlers = registrador(aplicadas, {}, new Set(['pisca']));
+    await registerIncomingWorker(a, depsPara(db, a, handlers));
+
+    // O retry do pg-boss espera alguns segundos (backoff); 'depois' não passa na frente.
+    await esperarAte(() => aplicadas.includes('depois'));
+    expect(aplicadas).toEqual(['oi', 'pisca', 'depois']);
+    expect(await a.findJobs(JOBS.incomingMessageDead)).toHaveLength(0);
   }, 40_000);
 
   it('job que o pg-boss falhou sozinho (expirou demais) é tirado da frente da conversa', async () => {

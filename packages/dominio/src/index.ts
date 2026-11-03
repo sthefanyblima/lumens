@@ -12,3 +12,6 @@ export {
   prazoLegal,
 } from './prazo';
 export type { ParametrosDePrazo, Prazo, TipoCaminho } from './prazo';
+
+export { ORCAMENTO_SEM_VERIFICACAO, PRIORIDADE, planejarEnvio } from './envio';
+export type { Disparo, ParametrosDeEnvio, PlanoDeEnvio, TipoDisparo } from './envio';

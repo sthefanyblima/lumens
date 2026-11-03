@@ -6,7 +6,9 @@ import { migrate as migratePg } from 'drizzle-orm/node-postgres/migrator';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import { Pool } from 'pg';
+import { PAPEL_APLICACAO } from './app-role';
 import type { Db } from './client';
+import { prepararPgBoss } from './pg-boss-admin';
 import * as schema from './schema';
 
 const PASTA_MIGRACOES = fileURLToPath(new URL('../migrations', import.meta.url));
@@ -16,7 +18,11 @@ const PASTA_MIGRACOES = fileURLToPath(new URL('../migrations', import.meta.url))
  * precisam de SQL de verdade sem depender do Docker. Cada chamada é um banco novo e vazio.
  */
 export async function criarBancoEmMemoria(): Promise<Db> {
-  const db = drizzle(new PGlite(), { schema });
+  const cliente = new PGlite();
+  // Em produção, `db:provision` cria o papel antes de `db:migrate`. O PGlite é um cluster novo
+  // por teste, então o helper reproduz essa pré-condição antes de aplicar as mesmas migrations.
+  await cliente.exec(`CREATE ROLE "${PAPEL_APLICACAO}"`);
+  const db = drizzle(cliente, { schema });
   await migrate(db, { migrationsFolder: PASTA_MIGRACOES });
   return db;
 }
@@ -42,6 +48,7 @@ export async function criarBancoTemporario(
   const pool = new Pool({ connectionString: url, connectionTimeoutMillis: 5000 });
   try {
     await migratePg(drizzlePg(pool), { migrationsFolder: PASTA_MIGRACOES });
+    await prepararPgBoss(url, pool);
   } finally {
     await pool.end();
   }
