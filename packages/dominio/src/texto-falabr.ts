@@ -100,12 +100,9 @@ export function gerarTextoFalaBr(
   if (pauta.meta === 0) {
     throw new RangeError('meta inválida: 0');
   }
-  if (pauta.apoios > pauta.meta) {
-    // Não é erro de digitação possível: ou a meta foi lida de outra pauta, ou
-    // a contagem de apoios veio de uma consulta errada. Protocolar com o
-    // número inflado é afirmar em documento público algo que não se sustenta.
-    throw new RangeError(`apoios (${String(pauta.apoios)}) acima da meta (${String(pauta.meta)})`);
-  }
+  // Apoios acima da meta não é erro: a meta é o limiar que libera a cobrança,
+  // não um teto, e o apoio continua aberto depois que ela bate.
+  const relacaoComMeta = pauta.apoios > pauta.meta ? 'acima da meta' : 'de uma meta';
 
   const local = pauta.bloco === null ? 'Campus inteiro' : arrumarParagrafos(pauta.bloco);
 
@@ -121,7 +118,7 @@ export function gerarTextoFalaBr(
       '',
       'Apoio',
       `Esta manifestação é apresentada coletivamente por ${String(pauta.apoios)} ` +
-        `estudantes que registraram apoio a ela, de uma meta de ${String(pauta.meta)}.`,
+        `estudantes que registraram apoio a ela, ${relacaoComMeta} de ${String(pauta.meta)}.`,
       '',
       'Pedido',
       'Solicitamos posicionamento formal da universidade sobre o problema descrito, ' +

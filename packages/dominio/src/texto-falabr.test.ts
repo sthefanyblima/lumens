@@ -163,14 +163,18 @@ describe('gerarTextoFalaBr (SCRUM-213)', () => {
       expect(() => gerarTextoFalaBr(pauta(mudanca))).toThrow(RangeError);
     });
 
-    it('rejeita mais apoios do que a meta', () => {
-      expect(() => gerarTextoFalaBr(pauta({ apoios: 301, meta: 300 }))).toThrow(RangeError);
-    });
-
     it('apoios igual à meta é o caso normal: meta batida', () => {
       const { texto } = gerarTextoFalaBr(pauta({ apoios: 300, meta: 300 }));
 
-      expect(texto).toContain('300');
+      expect(texto).toContain('300 estudantes que registraram apoio a ela, de uma meta de 300.');
+    });
+
+    it('apoios acima da meta geram o texto: o apoio continua depois que a meta bate', () => {
+      // Regressão: a função recusava este caso, que é o estado normal de uma
+      // pauta em meta_batida ou cobrando (ver pautas-teste.ts do site).
+      const { texto } = gerarTextoFalaBr(pauta({ apoios: 318, meta: 300 }));
+
+      expect(texto).toContain('318 estudantes que registraram apoio a ela, acima da meta de 300.');
     });
 
     it('zero apoio não impede o texto', () => {
