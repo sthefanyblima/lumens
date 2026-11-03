@@ -82,3 +82,9 @@ Inclua:
 - testes ou verificações recomendados.
 
 Não aprove uma PR quando houver problema `P0` ou `P1`.
+
+Quando houver qualquer problema que precise ser corrigido antes do merge:
+
+- envie a revisão no GitHub com o estado **Solicitar alterações** (`REQUEST_CHANGES`), em vez de publicar apenas um comentário;
+- use o veredito `ALTERAÇÕES NECESSÁRIAS` e mencione `@sthefanyblima` no resumo da revisão, para que a pessoa responsável receba a notificação;
+- mantenha `APROVADO COM RESSALVAS` apenas para sugestões que não precisam ser corrigidas antes do merge.
