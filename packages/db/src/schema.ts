@@ -34,6 +34,13 @@ export const tipoCaminho = pgEnum('tipo_caminho', ['falabr', 'comunidade', 'repr
 export const statusProposta = pgEnum('status_proposta', ['aberta', 'executada']);
 export const respostaConferencia = pgEnum('resposta_conferencia_valor', ['sim', 'em_parte', 'nao']);
 export const origemEvento = pgEnum('origem_evento', ['bot', 'curadoria', 'agendador']);
+/** Avisos que o bot inicia. A ordem de prioridade entre eles mora em `@lumens/dominio`. */
+export const tipoDisparo = pgEnum('tipo_disparo', [
+  'conferencia',
+  'resposta_oficial',
+  'meta_batida',
+  'lembrete',
+]);
 
 const instante = (nome: string) => timestamp(nome, { withTimezone: true });
 const tsvector = customType<{ data: string }>({ dataType: () => 'tsvector' });
@@ -299,3 +306,52 @@ export const mensagensProcessadas = pgTable('mensagem_processada', {
   wamidHmac: text('wamid_hmac').primaryKey(),
   recebidaEm: instante('recebida_em').notNull().defaultNow(),
 });
+
+/**
+ * Fila dos avisos que o bot inicia, e registro de entrega por pessoa (RNF06, SCRUM-202).
+ *
+ * Uma linha por aviso por pessoa: a unicidade de (tipo, aviso, estudante) faz o mesmo aviso
+ * enfileirado duas vezes virar uma linha só. A linha nunca é apagada depois de sair — é a prova,
+ * para a curadoria, de que a pessoa foi avisada e quando.
+ *
+ * Ciclo: enfileirado → reservado (um lote pegou) → enviado (a Meta aceitou) → entregue (o webhook
+ * confirmou). `falhou_em` tira da fila uma linha que a Meta recusou de vez.
+ */
+export const disparos = pgTable(
+  'disparo',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    tipo: tipoDisparo('tipo').notNull(),
+    /** Id do que o aviso comunica: pauta, promessa ou caminho. */
+    aviso: text('aviso').notNull(),
+    estudanteId: uuid('estudante_id')
+      .notNull()
+      .references(() => estudantes.id, { onDelete: 'restrict' }),
+    /** Nome da mensagem modelo aprovada pela Meta (SCRUM-193). */
+    modelo: text('modelo').notNull(),
+    /**
+     * Valores das variáveis do modelo, na ordem. Só dado público da pauta (título, datas, órgão):
+     * nada que identifique quem recebe, que sai do `estudante_id`.
+     */
+    parametros: jsonb('parametros').$type<string[]>().notNull().default([]),
+    enfileiradoEm: instante('enfileirado_em').notNull().defaultNow(),
+    reservadoEm: instante('reservado_em'),
+    enviadoEm: instante('enviado_em'),
+    /** HMAC do wamid devolvido pela Meta, para casar o status de entrega que chega pelo webhook. */
+    wamidHmac: text('wamid_hmac'),
+    entregueEm: instante('entregue_em'),
+    falhouEm: instante('falhou_em'),
+    /** Código ou mensagem de erro da Meta. Nunca o telefone. */
+    falha: text('falha'),
+  },
+  (t) => [
+    uniqueIndex('disparo_aviso_unique').on(t.tipo, t.aviso, t.estudanteId),
+    uniqueIndex('disparo_wamid_hmac_unique').on(t.wamidHmac),
+    index('disparo_estudante_id_idx').on(t.estudanteId),
+    // Os dois caminhos quentes: o que ainda falta sair, e quem já foi alcançado em 24h.
+    index('disparo_pendente_idx')
+      .on(t.enfileiradoEm)
+      .where(sql`${t.enviadoEm} IS NULL AND ${t.falhouEm} IS NULL`),
+    index('disparo_reservado_em_idx').on(t.reservadoEm),
+  ],
+);

@@ -29,6 +29,13 @@
       "when": 1793329826614,
       "tag": "0003_app_role_privileges",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793600307599,
+      "tag": "0004_fila_disparos",
+      "breakpoints": true
     }
   ]
 }

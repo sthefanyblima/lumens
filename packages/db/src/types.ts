@@ -33,3 +33,6 @@ export type MensagemProcessada = typeof schema.mensagensProcessadas.$inferSelect
 export type NovaMensagemProcessada = typeof schema.mensagensProcessadas.$inferInsert;
 export type Curador = typeof schema.curadores.$inferSelect;
 export type NovoCurador = typeof schema.curadores.$inferInsert;
+export type Disparo = typeof schema.disparos.$inferSelect;
+export type NovoDisparo = typeof schema.disparos.$inferInsert;
+export type TipoDisparo = Disparo['tipo'];
