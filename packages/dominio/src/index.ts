@@ -6,3 +6,6 @@ export type { Achado, MotivoAchado, OpcoesDeConferencia, Severidade, Veredicto }
 
 export { gerarTextoFalaBr } from './texto-falabr';
 export type { PautaParaTexto, TextoFalaBr } from './texto-falabr';
+
+export { ORCAMENTO_SEM_VERIFICACAO, PRIORIDADE, planejarEnvio } from './envio';
+export type { Disparo, ParametrosDeEnvio, PlanoDeEnvio, TipoDisparo } from './envio';

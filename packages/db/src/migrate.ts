@@ -1,16 +1,20 @@
 import { fileURLToPath } from 'node:url';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { criarCliente } from './client';
+import { prepararPgBoss } from './pg-boss-admin';
 
-const connectionString = process.env.DATABASE_URL;
+const connectionString = process.env.DATABASE_URL_MIGRACAO;
 if (!connectionString) {
-  throw new Error('Defina DATABASE_URL no ambiente ou no .env da raiz para executar db:migrate.');
+  throw new Error(
+    'Defina DATABASE_URL_MIGRACAO no ambiente ou no .env.database da raiz para executar db:migrate.',
+  );
 }
 
 const { db, pool } = criarCliente(connectionString);
 try {
   await migrate(db, { migrationsFolder: fileURLToPath(new URL('../migrations', import.meta.url)) });
-  console.log('Migrações aplicadas.');
+  await prepararPgBoss(connectionString, pool);
+  console.log('Migrações da aplicação e do pg-boss aplicadas.');
 } catch (erro) {
   const causa = erro instanceof Error && erro.cause ? erro.cause : erro;
   const codigo =
