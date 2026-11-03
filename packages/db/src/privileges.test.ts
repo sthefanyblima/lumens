@@ -377,7 +377,7 @@ describe('separação das URLs no processo de migração', () => {
         const { rows } = await pool.query<{ total: string }>(
           'SELECT count(*) AS total FROM drizzle.__drizzle_migrations',
         );
-        expect(rows[0]?.total).toBe('4');
+        expect(rows[0]?.total).toBe('5');
       } finally {
         await pool.end();
       }
@@ -437,7 +437,7 @@ describe('upgrade histórico para a migração de privilégios', () => {
       const depoisJournal = await pool.query<{ total: string }>(
         'SELECT count(*) AS total FROM drizzle.__drizzle_migrations',
       );
-      expect(depoisJournal.rows[0]?.total).toBe('4');
+      expect(depoisJournal.rows[0]?.total).toBe('5');
       expect(await buscarEvento(pool, sentinela.id)).toEqual(sentinela);
 
       const { rows: aplicacao } = await pool.query<{

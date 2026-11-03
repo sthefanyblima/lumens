@@ -26,6 +26,7 @@ erDiagram
   promessa ||--o{ resposta_conferencia : recebe
   estudante ||--o{ resposta_conferencia : responde
   pauta ||--o{ evento : registra
+  estudante ||--o{ disparo : recebe
   codigo_verificacao {
     text telefone_hmac PK
     text codigo_hash
@@ -46,7 +47,7 @@ erDiagram
 ```
 
 `pauta.bloco_id` é opcional (campus inteiro quando nulo). Código e conversa não referenciam
-estudante: ambos podem existir antes do cadastro. Todas as 16 FKs têm `ON DELETE RESTRICT`.
+estudante: ambos podem existir antes do cadastro. Todas as 17 FKs têm `ON DELETE RESTRICT`.
 
 ## Campos, nulabilidade e defaults
 
@@ -56,24 +57,25 @@ são UUID com `gen_random_uuid()`. Instantes são `timestamp with time zone`; `p
 HMACs e conteúdo cifrado são textos opacos; sua codificação será definida na implementação
 da cifra. Os campos sem tipo indicado são `text`, exceto FKs UUID e enums listados adiante.
 
-| Tabela               | Campos                                                                                                                                            | Opcionais                                                | Defaults / chaves                                                                   |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| estudante            | id, telefone_hmac, telefone_cifrado, email_hmac, email_cifrado, curso, verificado_em, saiu_em                                                     | email_hmac, email_cifrado, curso, verificado_em, saiu_em | PK id; telefone_hmac e email_hmac únicos                                            |
-| codigo_verificacao   | telefone_hmac, codigo_hash, expira_em, tentativas (integer)                                                                                       | nenhum                                                   | PK telefone_hmac; tentativas = 0 e >= 0                                             |
-| bloco                | id, slug, nome, base_estudantes (integer)                                                                                                         | nenhum                                                   | PK id; slug único; base_estudantes >= 0                                             |
-| pauta                | id, slug, titulo, descricao, bloco_id, categoria, status, meta (integer), criada_em, aprovada_em, meta_batida_em, motivo_recusa, busca (tsvector) | bloco_id, aprovada_em, meta_batida_em, motivo_recusa     | PK id; slug único; status = em_curadoria; criada_em = now(); meta > 0; busca gerada |
-| papel_pauta          | pauta_id, estudante_id, papel, desde, ate, ultima_atividade_em                                                                                    | ate                                                      | PK (pauta_id, estudante_id, desde); desde e ultima_atividade_em = now()             |
-| apoio                | pauta_id, estudante_id, origem, criado_em                                                                                                         | nenhum                                                   | PK (pauta_id, estudante_id); criado_em = now()                                      |
-| relato               | id, pauta_id, estudante_id, texto, foto_chave, moderacao, moderado_em                                                                             | foto_chave, moderado_em                                  | PK id; moderacao = pendente                                                         |
-| caminho              | id, pauta_id, tipo, status, protocolo, prazo, aberto_em                                                                                           | protocolo, prazo                                         | PK id; aberto_em = now()                                                            |
-| proposta             | id, pauta_id, descricao, pessoas_necessarias (integer), status, executada_em                                                                      | executada_em                                             | PK id; status = aberta; pessoas_necessarias > 0                                     |
-| voluntario           | proposta_id, estudante_id, criado_em                                                                                                              | nenhum                                                   | PK (proposta_id, estudante_id); criado_em = now()                                   |
-| promessa             | id, pauta_id, resumo, data_entrega, fonte, registrada_por, conferencia_abre_em, conferencia_fecha_em, resultado                                   | resultado                                                | PK id; registrada_por referencia curador; uma ativa por pauta                       |
-| resposta_conferencia | promessa_id, estudante_id, resposta, criado_em                                                                                                    | nenhum                                                   | PK (promessa_id, estudante_id); criado_em = now()                                   |
-| evento               | id, pauta_id, tipo, dados (JSONB), origem, publico (boolean), criado_em                                                                           | nenhum                                                   | PK id; dados = {}; publico = false; criado_em = now()                               |
-| conversa             | telefone_hmac, passo, dados (JSONB), expira_em, atualizado_em                                                                                     | nenhum                                                   | PK telefone_hmac; dados = {}; expira_em e atualizado_em = now()                     |
-| mensagem_processada  | wamid_hmac, recebida_em                                                                                                                           | nenhum                                                   | PK wamid_hmac; recebida_em = now()                                                  |
-| curador              | id, email_hmac, email_cifrado, nome, ativo (boolean)                                                                                              | nenhum                                                   | PK id; email_hmac único; ativo = true                                               |
+| Tabela               | Campos                                                                                                                                            | Opcionais                                                           | Defaults / chaves                                                                                   |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| estudante            | id, telefone_hmac, telefone_cifrado, email_hmac, email_cifrado, curso, verificado_em, saiu_em                                                     | email_hmac, email_cifrado, curso, verificado_em, saiu_em            | PK id; telefone_hmac e email_hmac únicos                                                            |
+| codigo_verificacao   | telefone_hmac, codigo_hash, expira_em, tentativas (integer)                                                                                       | nenhum                                                              | PK telefone_hmac; tentativas = 0 e >= 0                                                             |
+| bloco                | id, slug, nome, base_estudantes (integer)                                                                                                         | nenhum                                                              | PK id; slug único; base_estudantes >= 0                                                             |
+| pauta                | id, slug, titulo, descricao, bloco_id, categoria, status, meta (integer), criada_em, aprovada_em, meta_batida_em, motivo_recusa, busca (tsvector) | bloco_id, aprovada_em, meta_batida_em, motivo_recusa                | PK id; slug único; status = em_curadoria; criada_em = now(); meta > 0; busca gerada                 |
+| papel_pauta          | pauta_id, estudante_id, papel, desde, ate, ultima_atividade_em                                                                                    | ate                                                                 | PK (pauta_id, estudante_id, desde); desde e ultima_atividade_em = now()                             |
+| apoio                | pauta_id, estudante_id, origem, criado_em                                                                                                         | nenhum                                                              | PK (pauta_id, estudante_id); criado_em = now()                                                      |
+| relato               | id, pauta_id, estudante_id, texto, foto_chave, moderacao, moderado_em                                                                             | foto_chave, moderado_em                                             | PK id; moderacao = pendente                                                                         |
+| caminho              | id, pauta_id, tipo, status, protocolo, prazo, aberto_em                                                                                           | protocolo, prazo                                                    | PK id; aberto_em = now()                                                                            |
+| proposta             | id, pauta_id, descricao, pessoas_necessarias (integer), status, executada_em                                                                      | executada_em                                                        | PK id; status = aberta; pessoas_necessarias > 0                                                     |
+| voluntario           | proposta_id, estudante_id, criado_em                                                                                                              | nenhum                                                              | PK (proposta_id, estudante_id); criado_em = now()                                                   |
+| promessa             | id, pauta_id, resumo, data_entrega, fonte, registrada_por, conferencia_abre_em, conferencia_fecha_em, resultado                                   | resultado                                                           | PK id; registrada_por referencia curador; uma ativa por pauta                                       |
+| resposta_conferencia | promessa_id, estudante_id, resposta, criado_em                                                                                                    | nenhum                                                              | PK (promessa_id, estudante_id); criado_em = now()                                                   |
+| evento               | id, pauta_id, tipo, dados (JSONB), origem, publico (boolean), criado_em                                                                           | nenhum                                                              | PK id; dados = {}; publico = false; criado_em = now()                                               |
+| conversa             | telefone_hmac, passo, dados (JSONB), expira_em, atualizado_em                                                                                     | nenhum                                                              | PK telefone_hmac; dados = {}; expira_em e atualizado_em = now()                                     |
+| mensagem_processada  | wamid_hmac, recebida_em                                                                                                                           | nenhum                                                              | PK wamid_hmac; recebida_em = now()                                                                  |
+| curador              | id, email_hmac, email_cifrado, nome, ativo (boolean)                                                                                              | nenhum                                                              | PK id; email_hmac único; ativo = true                                                               |
+| disparo              | id, tipo, aviso, estudante_id, modelo, parametros (JSONB), enfileirado_em, reservado_em, enviado_em, wamid_hmac, entregue_em, falhou_em, falha    | reservado_em, enviado_em, wamid_hmac, entregue_em, falhou_em, falha | PK id; (tipo, aviso, estudante_id) único; wamid_hmac único; parametros = []; enfileirado_em = now() |
 
 A chave de `papel_pauta` inclui `desde` para preservar mandatos históricos. O limite de três
 responsáveis ativos pertence ao domínio; a migração não o implementa.
@@ -108,10 +110,13 @@ ser validados com a equipe na T7; esta versão não fixa um mapeamento de aprese
 Outros enums: `papel_na_pauta` = owner/co_owner; `origem_apoio` = bot/site;
 `moderacao_relato` = pendente/aprovado/recusado; `tipo_caminho` = falabr/comunidade/representante;
 `status_proposta` = aberta/executada; `resposta_conferencia_valor` = sim/em_parte/nao;
-`origem_evento` = bot/curadoria/agendador.
+`origem_evento` = bot/curadoria/agendador;
+`tipo_disparo` = conferencia/resposta_oficial/meta_batida/lembrete.
 
-`categoria`, `caminho.status`, `promessa.resultado` e `evento.tipo` são textos sem catálogo
-fechado na fonte recebida. Não pressupor valores além dos já acordados em cada integração.
+`categoria`, `caminho.status` e `promessa.resultado` continuam sendo textos sem catálogo fechado.
+`evento.tipo` também permanece `text` no banco, mas seus nomes e sua visibilidade foram fechados no
+[catálogo da T7](../esquema.md#tipos-de-evento-decididos). O domínio deve validar esse contrato; o
+banco ainda não o restringe por enum ou constraint.
 
 ## Índices e invariantes
 
@@ -127,6 +132,22 @@ fechado na fonte recebida. Não pressupor valores além dos já acordados em cad
   Pauta também possui índices por status e bloco_id.
 - `pauta.busca` é gerada automaticamente com `to_tsvector('portuguese', titulo || ' ' || descricao)`
   e índice GIN. Inserções/atualizações não devem fornecer essa coluna.
+
+## Fila de disparos
+
+SCRUM-202 · RNF06. `disparo` é a fila dos avisos que o bot inicia e, ao mesmo tempo, o registro de
+entrega por pessoa: a linha não é apagada depois de sair. Quem escreve nela é `@lumens/dominio`
+(`fila.ts`), nunca o bot ou o agendador direto.
+
+- **Um aviso por pessoa.** `disparo_aviso_unique` em (tipo, aviso, estudante_id) faz o mesmo aviso
+  enfileirado duas vezes virar uma linha só, mesmo com duas rotinas enfileirando ao mesmo tempo.
+- **Ciclo:** enfileirado → `reservado_em` (um lote pegou) → `enviado_em` (a Meta aceitou) →
+  `entregue_em` (o webhook confirmou). `falhou_em` tira da fila o que a Meta recusou de vez.
+- **Limite da Meta:** quem tem `reservado_em` ou `enviado_em` nas últimas 24h já ocupa uma vaga do
+  limite de pessoas distintas. A reserva conta para dois lotes simultâneos não passarem do limite; o
+  envio conta porque é dele que a Meta mede as 24h, e ele acontece depois da reserva.
+- **`parametros`** guarda os valores das variáveis da mensagem modelo. Só dado público da pauta;
+  quem recebe sai do `estudante_id`.
 
 ## Uso e verificação
 
@@ -153,12 +174,14 @@ O CI executa o mesmo SQL de criação do banco de teste usado no Docker e migra 
 antes dos testes. Testes de integração exercitam o runner real da migração e rejeições por
 SQLSTATE e constraint, além da busca, metadados e consumo de tipos pelo domínio.
 
-## Pendências para a equipe
+## Evolução e pendências para a equipe
 
-- T5: bloquear UPDATE, DELETE e TRUNCATE em evento; atualmente a tabela ainda é mutável.
-- T6: seed com blocos e uma pauta por status, além de `db:fresh`.
-- T7: validar diagrama, nulabilidade, enums abertos, resultado/atividade da promessa,
-  nomes dos eventos e rótulos públicos com as partes 2 a 5; registrar os participantes e decisões.
+- T5 concluída: a migration `0002_evento_append_only.sql` bloqueia UPDATE, DELETE e TRUNCATE em
+  `evento`.
+- T6 concluída: `pnpm db:fresh` aplica as migrations e carrega o seed com uma pauta por status.
+- T7 em validação: o [material da apresentação](../esquema.md) consolida o diagrama, status,
+  transições, funções e eventos decididos. Participantes e pedidos devem ser registrados
+  na [ata de decisões](../decisoes.md); enquanto ela estiver pendente, o contrato não está congelado.
 - Confirmar nomes reais dos blocos e base DIACOM antes do seed definitivo.
 - Domínio/agendador: expiração em dez minutos, máximo de tentativas, retenção de 24h,
   máximo de responsáveis ativos e transições. Os campos existem; as rotinas não estão nesta task.

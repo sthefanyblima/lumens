@@ -7,5 +7,44 @@ export type { Achado, MotivoAchado, OpcoesDeConferencia, Severidade, Veredicto }
 export { gerarTextoFalaBr } from './texto-falabr';
 export type { PautaParaTexto, TextoFalaBr } from './texto-falabr';
 
+export {
+  PRAZO_INICIAL_DIAS,
+  PRAZO_PRORROGACAO_DIAS,
+  calcularPrazo,
+  diasAteOPrazo,
+  prazoLegal,
+} from './prazo';
+export type { ParametrosDePrazo, Prazo, TipoCaminho } from './prazo';
+
+export { registrarProtocolo } from './caminho-registro';
+export type {
+  MotivoRecusaProtocolo,
+  RegistroDeProtocolo,
+  ResultadoProtocolo,
+} from './caminho-registro';
+
+export { QUORUM_MINIMO, apurarConferencia } from './conferencia';
+export type {
+  Apuracao,
+  ContagemRespostas,
+  ParametrosApuracao,
+  RespostaConferencia,
+  ResultadoApuracao,
+} from './conferencia';
+
+export { interpretarResposta } from './conferencia';
+export { registrarRespostaConferencia } from './conferencia-registro';
+export type { MotivoRecusa, RegistroDeResposta, ResultadoRegistro } from './conferencia-registro';
+
 export { ORCAMENTO_SEM_VERIFICACAO, PRIORIDADE, planejarEnvio } from './envio';
 export type { Disparo, ParametrosDeEnvio, PlanoDeEnvio, TipoDisparo } from './envio';
+
+export {
+  RESERVA_EXPIRA_MS,
+  enfileirarDisparos,
+  registrarEntrega,
+  registrarEnvio,
+  registrarFalha,
+  reservarLote,
+} from './fila';
+export type { DisparoReservado, NovoAviso, ParametrosDeLote } from './fila';
