@@ -13,5 +13,12 @@ export {
 } from './prazo';
 export type { ParametrosDePrazo, Prazo, TipoCaminho } from './prazo';
 
+export { registrarProtocolo } from './caminho-registro';
+export type {
+  MotivoRecusaProtocolo,
+  RegistroDeProtocolo,
+  ResultadoProtocolo,
+} from './caminho-registro';
+
 export { ORCAMENTO_SEM_VERIFICACAO, PRIORIDADE, planejarEnvio } from './envio';
 export type { Disparo, ParametrosDeEnvio, PlanoDeEnvio, TipoDisparo } from './envio';
