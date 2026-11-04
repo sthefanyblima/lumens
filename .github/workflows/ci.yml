@@ -4,6 +4,7 @@ name: CI
 # nenhum dos pais — dois PRs verdes que se cruzam podem quebrar a main.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main]
 
@@ -45,6 +46,24 @@ jobs:
           --health-retries 12
 
     steps:
+      - name: Validar vínculo com o Jira
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          BRANCH: ${{ github.head_ref }}
+          TITULO_PR: ${{ github.event.pull_request.title }}
+        shell: bash
+        run: |
+          if [[ ! "$BRANCH" =~ (^|/)SCRUM-([0-9]+)(-|$) ]]; then
+            echo "::error::A branch deve conter uma chave Jira válida, como feat/SCRUM-82-descricao."
+            exit 1
+          fi
+
+          chave="SCRUM-${BASH_REMATCH[2]}"
+          if [[ "$TITULO_PR" != *"[$chave]"* ]]; then
+            echo "::error::O título da PR deve conter [$chave], a mesma chave usada na branch."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
 
       # Precisa vir ANTES do setup-node: o cache do pnpm não encontra o gerenciador
@@ -143,3 +162,51 @@ jobs:
       - name: Remover o .env do workspace
         if: ${{ always() }}
         run: rm -f .env
+
+  deploy:
+    name: deploy-${{ matrix.projeto }}
+    needs: check
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - projeto: site
+            project_id_secret: VERCEL_SITE_PROJECT_ID
+          - projeto: painel
+            project_id_secret: VERCEL_PAINEL_PROJECT_ID
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets[matrix.project_id_secret] }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Validar credenciais da Vercel
+        shell: bash
+        run: |
+          if [[ -z "$VERCEL_TOKEN" || -z "$VERCEL_ORG_ID" || -z "$VERCEL_PROJECT_ID" ]]; then
+            echo "::error::Configure VERCEL_TOKEN, VERCEL_ORG_ID e o project ID de ${{ matrix.projeto }} nos secrets do repositório."
+            exit 1
+          fi
+
+      - name: Instalar Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Carregar configuração de produção
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Gerar build de produção
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+
+      - name: Publicar na Vercel
+        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
