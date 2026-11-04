@@ -31,6 +31,26 @@ export default tseslint.config(
     },
   },
   {
+    // `next/font/google` baixa as fontes durante o build. Uma falha de rede no
+    // runner quebra o `check`, e o `deploy` depende dele. Use `next/font/local`
+    // com os arquivos de apps/site/src/fontes.
+    files: ['apps/*/src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'next/font/google',
+              message:
+                'Use next/font/local: o build não pode depender de rede. Ver apps/site/src/fontes/README.md.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['**/*.js', '**/*.mjs'],
     ...tseslint.configs.disableTypeChecked,
   },
