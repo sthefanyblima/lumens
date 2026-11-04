@@ -4,6 +4,7 @@ name: CI
 # nenhum dos pais — dois PRs verdes que se cruzam podem quebrar a main.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main]
 
@@ -45,6 +46,24 @@ jobs:
           --health-retries 12
 
     steps:
+      - name: Validar vínculo com o Jira
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          BRANCH: ${{ github.head_ref }}
+          TITULO_PR: ${{ github.event.pull_request.title }}
+        shell: bash
+        run: |
+          if [[ ! "$BRANCH" =~ (^|/)SCRUM-([0-9]+)(-|$) ]]; then
+            echo "::error::A branch deve conter uma chave Jira válida, como feat/SCRUM-82-descricao."
+            exit 1
+          fi
+
+          chave="SCRUM-${BASH_REMATCH[2]}"
+          if [[ "$TITULO_PR" != *"[$chave]"* ]]; then
+            echo "::error::O título da PR deve conter [$chave], a mesma chave usada na branch."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
 
       # Precisa vir ANTES do setup-node: o cache do pnpm não encontra o gerenciador
