@@ -42,6 +42,10 @@ Para atualizar, pegue a URL do bloco `latin` em
 com User-Agent de navegador moderno — sem isso o Google devolve `ttf` em vez de
 `woff2`. Confira se a faixa de pesos mudou e ajuste o `weight` no `layout.tsx`.
 
+**A Inter tem uma segunda cópia** em `apps/painel/src/fontes/`, byte a byte
+igual a esta. Ao atualizá-la aqui, copie para lá — o teste
+`apps/painel/src/fontes/copia-da-inter.test.ts` falha se as duas divergirem.
+
 ## Licença
 
 As três famílias são SIL Open Font License 1.1, que permite redistribuir desde

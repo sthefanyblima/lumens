@@ -5,7 +5,7 @@ import './globals.css';
 
 // A fonte é local, não `next/font/google`: aquele baixa os arquivos durante o
 // build, e uma falha de rede no runner quebra o `check` — que o `deploy`
-// exige. O arquivo é cópia do que o site usa; ver src/fontes/README.md.
+// exige. Procedência e licença em src/fontes/README.md.
 const corpo = localFont({
   src: '../fontes/inter-latin-var.woff2',
   weight: '100 900',
