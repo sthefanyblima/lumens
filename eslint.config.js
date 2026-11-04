@@ -33,17 +33,22 @@ export default tseslint.config(
   {
     // `next/font/google` baixa as fontes durante o build. Uma falha de rede no
     // runner quebra o `check`, e o `deploy` depende dele. Use `next/font/local`
-    // com os arquivos de apps/site/src/fontes.
-    files: ['apps/*/src/**/*.{ts,tsx}'],
+    // com arquivos do próprio app.
+    //
+    // O escopo é o repositório inteiro, não só `apps/*/src`: um componente em
+    // `packages/`, uma rota fora de `src` ou um `next.config.ts` chegam ao
+    // mesmo build e reabririam o buraco. `patterns` em vez de `paths` porque
+    // `paths` casa só o especificador exato, deixando passar subcaminhos.
+    files: ['**/*.{ts,tsx,js,mjs}'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
-          paths: [
+          patterns: [
             {
-              name: 'next/font/google',
+              group: ['next/font/google', 'next/font/google/*'],
               message:
-                'Use next/font/local: o build não pode depender de rede. Ver apps/site/src/fontes/README.md.',
+                'Use next/font/local com arquivos do próprio app: o build não pode depender de rede. Ver apps/site/src/fontes/README.md como referência.',
             },
           ],
         },
