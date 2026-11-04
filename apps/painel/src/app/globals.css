@@ -16,7 +16,7 @@ body {
   margin: 0;
   background: var(--fundo);
   color: var(--tinta);
-  font-family: Inter, system-ui, sans-serif;
+  font-family: var(--fonte-corpo), system-ui, sans-serif;
 }
 
 :focus-visible {
