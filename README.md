@@ -168,10 +168,14 @@ pnpm --filter @lumens/site build   # build de produção
 
 Homologação: [lumens-hazel.vercel.app](https://lumens-hazel.vercel.app).
 
-Até o ambiente da AWS (1.1b), o site é publicado na Vercel pela integração com o GitHub.
-O projeto `lumens` está conectado ao repositório `lumens0/lumens`, com `apps/site` como
-diretório do site. Cada merge na `main` dispara um novo build; quando ele termina com sucesso,
-o site é atualizado automaticamente. O status e os logs do deploy ficam no painel da Vercel.
+Até o ambiente da AWS (1.1b), o site e o painel são publicados na Vercel pelo GitHub Actions.
+Após o `check` passar na `main`, o job `deploy` publica os projetos `lumens` e `lumens-painel`
+pela Vercel CLI. Isso mantém o deploy automático no plano Hobby mesmo com o repositório na
+organização `lumens0`. O status e os logs do deploy ficam no GitHub Actions e na Vercel.
+
+O repositório precisa dos secrets `VERCEL_TOKEN`, `VERCEL_ORG_ID`,
+`VERCEL_SITE_PROJECT_ID` e `VERCEL_PAINEL_PROJECT_ID`. Na Vercel, os diretórios raiz dos
+projetos continuam sendo `apps/site` e `apps/painel`, respectivamente.
 
 ## Painel de curadoria
 

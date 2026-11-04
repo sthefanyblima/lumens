@@ -162,3 +162,51 @@ jobs:
       - name: Remover o .env do workspace
         if: ${{ always() }}
         run: rm -f .env
+
+  deploy:
+    name: deploy-${{ matrix.projeto }}
+    needs: check
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - projeto: site
+            project_id_secret: VERCEL_SITE_PROJECT_ID
+          - projeto: painel
+            project_id_secret: VERCEL_PAINEL_PROJECT_ID
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets[matrix.project_id_secret] }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Validar credenciais da Vercel
+        shell: bash
+        run: |
+          if [[ -z "$VERCEL_TOKEN" || -z "$VERCEL_ORG_ID" || -z "$VERCEL_PROJECT_ID" ]]; then
+            echo "::error::Configure VERCEL_TOKEN, VERCEL_ORG_ID e o project ID de ${{ matrix.projeto }} nos secrets do repositório."
+            exit 1
+          fi
+
+      - name: Instalar Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Carregar configuração de produção
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Gerar build de produção
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+
+      - name: Publicar na Vercel
+        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
