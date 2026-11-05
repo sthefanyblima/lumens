@@ -166,7 +166,9 @@ pnpm --filter @lumens/site dev     # http://localhost:3000
 pnpm --filter @lumens/site build   # build de produção
 ```
 
-Homologação: [lumens-hazel.vercel.app](https://lumens-hazel.vercel.app).
+Homologação: [lumens-ufal.vercel.app](https://lumens-ufal.vercel.app). O endereço antigo
+`lumens-hazel.vercel.app` continua respondendo, mas é o nome que a Vercel gerou sozinha quando
+`lumens.vercel.app` já estava tomado — use o novo em links, cartões e mensagens (SCRUM-242).
 
 Até o ambiente da AWS (1.1b), o site e o painel são publicados na Vercel pelo GitHub Actions.
 Após o `check` passar na `main`, o job `deploy` publica os projetos `lumens` e `lumens-painel`
@@ -186,6 +188,8 @@ curadoria; o login por link no e-mail entra na SCRUM-164.
 pnpm --filter @lumens/painel dev     # http://localhost:3002
 pnpm --filter @lumens/painel build   # build de produção
 ```
+
+Homologação: [lumens-painel.vercel.app](https://lumens-painel.vercel.app).
 
 Na Vercel, o projeto do painel usa `apps/painel` como diretório raiz. Assim, site e painel têm
 deploys e configurações independentes mesmo compartilhando o monorepo.
