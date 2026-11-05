@@ -10,7 +10,13 @@
 -- por quem consulta (por exemplo, uma função temporária que imprime o que recebe) rode antes dos
 -- filtros da view e enxergue as linhas escondidas.
 --
--- Pauta pública = qualquer status diferente de `em_curadoria` e `recusada`.
+-- Pauta pública = status numa lista FECHADA (allowlist), repetida em cada filtro abaixo:
+--   juntando_apoios, meta_batida, cobrando, prometido, entregue_em_parte, descumprida, conquistada.
+-- `em_curadoria` e `recusada` ficam de fora. Um valor novo de `status_pauta` nasce escondido até
+-- alguém incluí-lo aqui, numa migração nova (o teste de classificação do enum falha até lá).
+-- A lista fica inline, e não numa função `pauta_publica(status)`: o EXECUTE de função chamada
+-- dentro de view é conferido contra quem consulta, não contra o owner, e a função exigiria
+-- EXECUTE para `lumens_site` e mais um objeto a proteger.
 
 CREATE VIEW "v_resumo" WITH (security_barrier = true) AS
 SELECT
@@ -21,11 +27,11 @@ SELECT
 		SELECT count(*)
 		FROM "apoio" a
 		JOIN "pauta" pa ON pa.id = a.pauta_id
-		WHERE pa.status NOT IN ('em_curadoria', 'recusada')
+		WHERE pa.status IN ('juntando_apoios', 'meta_batida', 'cobrando', 'prometido', 'entregue_em_parte', 'descumprida', 'conquistada')
 	)::int AS apoios,
 	count(*) FILTER (WHERE p.status = 'conquistada')::int AS conquistas
 FROM "pauta" p
-WHERE p.status NOT IN ('em_curadoria', 'recusada');
+WHERE p.status IN ('juntando_apoios', 'meta_batida', 'cobrando', 'prometido', 'entregue_em_parte', 'descumprida', 'conquistada');
 --> statement-breakpoint
 CREATE VIEW "v_pauta_publica" WITH (security_barrier = true) AS
 SELECT
@@ -91,7 +97,7 @@ LEFT JOIN LATERAL (
 	FROM "promessa" pr
 	WHERE pr.pauta_id = p.id AND pr.resultado IS NULL
 ) promessa ON true
-WHERE p.status NOT IN ('em_curadoria', 'recusada');
+WHERE p.status IN ('juntando_apoios', 'meta_batida', 'cobrando', 'prometido', 'entregue_em_parte', 'descumprida', 'conquistada');
 --> statement-breakpoint
 CREATE VIEW "v_relato_publico" WITH (security_barrier = true) AS
 SELECT
@@ -103,7 +109,7 @@ SELECT
 FROM "relato" r
 JOIN "pauta" p ON p.id = r.pauta_id
 JOIN "estudante" e ON e.id = r.estudante_id
-WHERE r.moderacao = 'aprovado' AND p.status NOT IN ('em_curadoria', 'recusada');
+WHERE r.moderacao = 'aprovado' AND p.status IN ('juntando_apoios', 'meta_batida', 'cobrando', 'prometido', 'entregue_em_parte', 'descumprida', 'conquistada');
 --> statement-breakpoint
 -- Caminhos (Fala.BR, comunidade, representante) e propostas, que são o caminho que pede
 -- voluntários. `tipo = 'proposta'` distingue as linhas; colunas que não se aplicam ficam nulas.
@@ -121,7 +127,7 @@ SELECT
 	NULL::timestamptz AS executada_em
 FROM "caminho" c
 JOIN "pauta" p ON p.id = c.pauta_id
-WHERE p.status NOT IN ('em_curadoria', 'recusada')
+WHERE p.status IN ('juntando_apoios', 'meta_batida', 'cobrando', 'prometido', 'entregue_em_parte', 'descumprida', 'conquistada')
 UNION ALL
 SELECT
 	p.slug AS pauta_slug,
@@ -136,7 +142,7 @@ SELECT
 	pr.executada_em
 FROM "proposta" pr
 JOIN "pauta" p ON p.id = pr.pauta_id
-WHERE p.status NOT IN ('em_curadoria', 'recusada');
+WHERE p.status IN ('juntando_apoios', 'meta_batida', 'cobrando', 'prometido', 'entregue_em_parte', 'descumprida', 'conquistada');
 --> statement-breakpoint
 CREATE VIEW "v_linha_do_tempo" WITH (security_barrier = true) AS
 SELECT
@@ -152,7 +158,7 @@ SELECT
 	e.criado_em
 FROM "evento" e
 JOIN "pauta" p ON p.id = e.pauta_id
-WHERE e.publico AND p.status NOT IN ('em_curadoria', 'recusada');
+WHERE e.publico AND p.status IN ('juntando_apoios', 'meta_batida', 'cobrando', 'prometido', 'entregue_em_parte', 'descumprida', 'conquistada');
 --> statement-breakpoint
 CREATE VIEW "v_conquista" WITH (security_barrier = true) AS
 SELECT
@@ -177,8 +183,13 @@ LEFT JOIN LATERAL (
 ) conquista ON true
 WHERE p.status = 'conquistada';
 --> statement-breakpoint
--- Os 50 eventos públicos mais recentes de todas as pautas públicas. Quem consulta ainda deve
--- ordenar por `criado_em DESC`: o SQL não garante a ordem de uma view.
+-- Eventos públicos de todas as pautas públicas, para o feed de atividade. Sem LIMIT: quem consulta
+-- ordena por `criado_em DESC` e pagina (a API aceita até 100 por página).
+-- O ORDER BY interno não limita nada; ele existe pelo plano. Com `security_barrier`, a view é
+-- planejada à parte e não enxerga o ORDER BY ... LIMIT de fora: sem ordem própria, ela junta tudo,
+-- calcula `dados` de cada evento e só então ordena. Ordenada, a página sai do índice parcial
+-- `evento_publico_criado_em_idx` (criado_em DESC) por nested loop, e só as linhas da página são
+-- calculadas. O SQL não promete a ordem de uma view; por isso quem consulta ordena mesmo assim.
 CREATE VIEW "v_atividade" WITH (security_barrier = true) AS
 SELECT
 	p.slug AS pauta_slug,
@@ -194,12 +205,20 @@ SELECT
 	e.criado_em
 FROM "evento" e
 JOIN "pauta" p ON p.id = e.pauta_id
-WHERE e.publico AND p.status NOT IN ('em_curadoria', 'recusada')
-ORDER BY e.criado_em DESC NULLS LAST
-LIMIT 50;
+WHERE e.publico AND p.status IN ('juntando_apoios', 'meta_batida', 'cobrando', 'prometido', 'entregue_em_parte', 'descumprida', 'conquistada')
+ORDER BY e.criado_em DESC;
+--> statement-breakpoint
+-- Todos os blocos, inclusive os sem pauta pública: o filtro de bloco do site lista todos.
+-- Bloco não tem dado pessoal; a view existe para o site não precisar ler tabela nenhuma.
+CREATE VIEW "v_bloco" WITH (security_barrier = true) AS
+SELECT
+	b.slug,
+	b.nome,
+	b.base_estudantes
+FROM "bloco" b;
 --> statement-breakpoint
 -- `lumens_site` é criado por `pnpm db:provision` antes desta migração, como `lumens_app`.
--- Começa sem nada em tabelas e sequências e recebe SELECT só nas sete views. Os privilégios
+-- Começa sem nada em tabelas e sequências e recebe SELECT só nas oito views. Os privilégios
 -- padrão da 0003 valem apenas para `lumens_app`: tabelas e views futuras não chegam a ele.
 REVOKE ALL ON ALL TABLES IN SCHEMA "public" FROM "lumens_site";
 --> statement-breakpoint
@@ -214,5 +233,6 @@ GRANT SELECT ON
 	"v_caminho_publico",
 	"v_linha_do_tempo",
 	"v_conquista",
-	"v_atividade"
+	"v_atividade",
+	"v_bloco"
 TO "lumens_site";

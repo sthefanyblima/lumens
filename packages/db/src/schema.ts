@@ -283,9 +283,10 @@ export const eventos = pgTable(
   },
   (t) => [
     index('evento_pauta_criado_em_idx').on(t.pautaId, t.criadoEm),
-    // Atividade recente do site (`v_atividade`): os últimos eventos públicos de todas as pautas.
+    // Feed de atividade do site (`v_atividade`), paginado por `ORDER BY criado_em DESC`. O
+    // NULLS FIRST é o padrão do DESC: com NULLS LAST o planejador não usa a ordem do índice.
     index('evento_publico_criado_em_idx')
-      .on(t.criadoEm.desc())
+      .on(t.criadoEm.desc().nullsFirst())
       .where(sql`${t.publico}`),
   ],
 );

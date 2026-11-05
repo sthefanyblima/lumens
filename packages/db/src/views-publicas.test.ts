@@ -10,6 +10,7 @@ import { criarBancoEmMemoria } from './teste';
 // (`seed/data.ts`), conferidos linha a linha — nunca da própria view.
 const VIEWS = [
   'v_atividade',
+  'v_bloco',
   'v_caminho_publico',
   'v_conquista',
   'v_linha_do_tempo',
@@ -17,6 +18,18 @@ const VIEWS = [
   'v_relato_publico',
   'v_resumo',
 ] as const;
+// Classificação de cada valor de `status_pauta`. Um valor novo no enum precisa entrar numa das
+// duas listas (e, se público, na allowlist da migração), ou o teste de classificação falha.
+const STATUS_PUBLICOS = [
+  'juntando_apoios',
+  'meta_batida',
+  'cobrando',
+  'prometido',
+  'entregue_em_parte',
+  'descumprida',
+  'conquistada',
+];
+const STATUS_ESCONDIDOS = ['em_curadoria', 'recusada'];
 const PAUTA_EM_CURADORIA = 'mais-arvores-no-campus';
 const PAUTA_RECUSADA = 'tomadas-nas-mesas-da-biblioteca';
 const PAUTAS_PUBLICAS = [
@@ -77,7 +90,7 @@ describe('views públicas com o seed', () => {
     await executarSeed(db);
   }, 60_000);
 
-  it('instala exatamente as sete views públicas', async () => {
+  it('instala exatamente as oito views públicas', async () => {
     const linhas = await consultar<{ table_name: string }>(
       db,
       sql`SELECT table_name FROM information_schema.views
@@ -116,7 +129,7 @@ describe('views públicas com o seed', () => {
       expect(await codigoDoErro(comoSite(db, sql`SELECT * FROM estudante`))).toBe('42501');
     });
 
-    it('tem só SELECT, e só nas sete views', async () => {
+    it('tem só SELECT, e só nas oito views', async () => {
       const linhas = await consultar<{ table_name: string; privilege_type: string }>(
         db,
         sql`SELECT table_name, privilege_type FROM information_schema.role_table_grants
@@ -183,6 +196,16 @@ describe('views públicas com o seed', () => {
         VIEWS.map((view) => ({ relname: view, reloptions: ['security_barrier=true'] })),
       );
     });
+  });
+
+  it('indexa os eventos públicos na ordem em que v_atividade é paginada', async () => {
+    const [linha] = await consultar<{ indexdef: string }>(
+      db,
+      sql`SELECT indexdef FROM pg_indexes WHERE indexname = 'evento_publico_criado_em_idx'`,
+    );
+
+    // `DESC` sem `NULLS LAST`: casa com `ORDER BY criado_em DESC`, que é NULLS FIRST.
+    expect(linha?.indexdef).toMatch(/\(criado_em DESC\) WHERE publico$/);
   });
 
   describe('dados', () => {
@@ -348,6 +371,26 @@ describe('views públicas com o seed', () => {
       ]);
     });
 
+    it('v_bloco lista todos os blocos do seed com a base de estudantes', async () => {
+      const linhas = await comoSite(
+        db,
+        sql`SELECT slug, nome, base_estudantes FROM v_bloco ORDER BY slug`,
+      );
+
+      expect(linhas).toEqual([
+        { slug: 'artes', nome: 'Bloco de Artes (fictício)', base_estudantes: 800 },
+        { slug: 'biblioteca-central', nome: 'Biblioteca Central', base_estudantes: 120 },
+        { slug: 'bloco-18', nome: 'Bloco 18 (fictício)', base_estudantes: 1200 },
+        { slug: 'engenharias', nome: 'Bloco das Engenharias (fictício)', base_estudantes: 5000 },
+        {
+          slug: 'residencia-universitaria',
+          nome: 'Residência Universitária',
+          base_estudantes: 3000,
+        },
+        { slug: 'saude', nome: 'Bloco da Saúde (fictício)', base_estudantes: 650 },
+      ]);
+    });
+
     it('v_atividade começa pelo evento público mais recente', async () => {
       const linhas = await comoSite<{ pauta_slug: string; criado_em: unknown }>(
         db,
@@ -443,7 +486,7 @@ describe('views públicas com dados além do seed', () => {
     expect(await etapa()).toBe('Meta alcançada');
   });
 
-  it('v_atividade limita aos 50 eventos públicos mais recentes', async () => {
+  it('v_atividade devolve todos os eventos públicos, mesmo mais de 50, e pagina por offset', async () => {
     const pautaId = await idDaPauta(db, 'bebedouros-no-bloco-18');
     await db.execute(
       sql`INSERT INTO evento (pauta_id, tipo, origem, publico, criado_em)
@@ -456,10 +499,40 @@ describe('views públicas com dados além do seed', () => {
       db,
       sql`SELECT tipo, criado_em FROM v_atividade ORDER BY criado_em DESC`,
     );
+    // Como a API vai paginar: página de 100 a partir do 50º evento.
+    const segundaPagina = await comoSite<{ tipo: string }>(
+      db,
+      sql`SELECT tipo FROM v_atividade ORDER BY criado_em DESC LIMIT 100 OFFSET 50`,
+    );
 
-    expect(linhas).toHaveLength(50);
-    expect(linhas.every((l) => l.tipo === 'teste_volume')).toBe(true);
+    // 60 novos + as 25 transições públicas do seed; os eventos que os testes anteriores deste
+    // bloco criaram são de pauta escondida ou não públicos.
+    expect(linhas.filter((l) => l.tipo === 'teste_volume')).toHaveLength(60);
+    expect(linhas).toHaveLength(85);
     expect(instante(linhas[0]?.criado_em)).toBe('2027-01-01T01:00:00.000Z');
+    expect(segundaPagina).toHaveLength(35);
+  });
+
+  it('v_bloco lista bloco sem pauta e bloco só com pauta escondida', async () => {
+    await db.execute(
+      sql`INSERT INTO bloco (slug, nome, base_estudantes)
+          VALUES ('bloco-vazio', 'Bloco sem pauta', 40), ('bloco-escondido', 'Bloco escondido', 90)`,
+    );
+    await db.execute(
+      sql`INSERT INTO pauta (slug, titulo, descricao, categoria, meta, bloco_id, status)
+          SELECT 'pauta-do-bloco-escondido', 'Escondida', 'Só em curadoria', 'teste', 30, id, 'em_curadoria'
+          FROM bloco WHERE slug = 'bloco-escondido'`,
+    );
+
+    const linhas = await comoSite(
+      db,
+      sql`SELECT slug, nome, base_estudantes FROM v_bloco
+          WHERE slug IN ('bloco-vazio', 'bloco-escondido') ORDER BY slug`,
+    );
+    expect(linhas).toEqual([
+      { slug: 'bloco-escondido', nome: 'Bloco escondido', base_estudantes: 90 },
+      { slug: 'bloco-vazio', nome: 'Bloco sem pauta', base_estudantes: 40 },
+    ]);
   });
 
   it('não mostra caminho nem proposta de pauta em curadoria ou recusada', async () => {
@@ -575,5 +648,90 @@ describe('views públicas com dados além do seed', () => {
         view,
       ).toEqual([]);
     }
+  });
+});
+
+describe('classificação dos status da pauta', () => {
+  let db: Db;
+
+  beforeAll(async () => {
+    db = await criarBancoEmMemoria();
+    await executarSeed(db);
+  }, 60_000);
+
+  it('todo valor de status_pauta está classificado como público ou escondido', async () => {
+    const [linha] = await consultar<{ valores: string[] | string }>(
+      db,
+      sql`SELECT enum_range(NULL::status_pauta)::text[] AS valores`,
+    );
+    const bruto = linha?.valores ?? [];
+    // O PGlite pode devolver o array como texto `{a,b}`.
+    const valores = Array.isArray(bruto) ? bruto : bruto.replace(/^\{|\}$/g, '').split(',');
+
+    const semClassificacao = valores.filter(
+      (v) => !STATUS_PUBLICOS.includes(v) && !STATUS_ESCONDIDOS.includes(v),
+    );
+    expect(semClassificacao).toEqual([]);
+    expect([...valores].sort()).toEqual([...STATUS_PUBLICOS, ...STATUS_ESCONDIDOS].sort());
+  });
+
+  it('cada view mostra exatamente as pautas dos status públicos', async () => {
+    const todos = [...STATUS_PUBLICOS, ...STATUS_ESCONDIDOS];
+    for (const status of todos) {
+      const slug = `classificacao-${status}`;
+      await db.execute(
+        sql`INSERT INTO pauta (slug, titulo, descricao, categoria, meta, status)
+            VALUES (${slug}, ${slug}, 'Classificação de status', 'teste', 30, ${status}::status_pauta)`,
+      );
+      const pautaId = await idDaPauta(db, slug);
+      await db.execute(
+        sql`INSERT INTO evento (pauta_id, tipo, origem, publico)
+            VALUES (${pautaId}, 'teste_classificacao', 'curadoria', true)`,
+      );
+      await db.execute(
+        sql`INSERT INTO relato (pauta_id, estudante_id, texto, moderacao)
+            SELECT ${pautaId}, id, 'Relato de classificação', 'aprovado' FROM estudante LIMIT 1`,
+      );
+      await db.execute(
+        sql`INSERT INTO caminho (pauta_id, tipo, status) VALUES (${pautaId}, 'comunidade', 'aberto')`,
+      );
+      await db.execute(
+        sql`INSERT INTO proposta (pauta_id, descricao, pessoas_necessarias)
+            VALUES (${pautaId}, 'Proposta de classificação', 2)`,
+      );
+    }
+    const esperado = STATUS_PUBLICOS.map((s) => `classificacao-${s}`).sort();
+
+    const consultas: Record<string, SQL> = {
+      v_pauta_publica: sql`SELECT slug AS pauta_slug FROM v_pauta_publica`,
+      v_relato_publico: sql`SELECT pauta_slug FROM v_relato_publico`,
+      'v_caminho_publico (caminho)': sql`SELECT pauta_slug FROM v_caminho_publico WHERE tipo <> 'proposta'`,
+      'v_caminho_publico (proposta)': sql`SELECT pauta_slug FROM v_caminho_publico WHERE tipo = 'proposta'`,
+      v_linha_do_tempo: sql`SELECT pauta_slug FROM v_linha_do_tempo`,
+      v_atividade: sql`SELECT pauta_slug FROM v_atividade`,
+    };
+    for (const [nome, consulta] of Object.entries(consultas)) {
+      const linhas = await comoSite<{ pauta_slug: string }>(db, consulta);
+      const slugs = [
+        ...new Set(
+          linhas.map((l) => l.pauta_slug).filter((slug) => slug.startsWith('classificacao-')),
+        ),
+      ].sort();
+      expect(slugs, nome).toEqual(esperado);
+    }
+  });
+
+  it('v_resumo soma apoios só dos status públicos', async () => {
+    const [antes] = await comoSite<{ apoios: number }>(db, sql`SELECT apoios FROM v_resumo`);
+    for (const status of [...STATUS_PUBLICOS, ...STATUS_ESCONDIDOS]) {
+      const pautaId = await idDaPauta(db, `classificacao-${status}`);
+      await db.execute(
+        sql`INSERT INTO apoio (pauta_id, estudante_id, origem)
+            SELECT ${pautaId}, id, 'site' FROM estudante ORDER BY id LIMIT 1`,
+      );
+    }
+
+    const [depois] = await comoSite<{ apoios: number }>(db, sql`SELECT apoios FROM v_resumo`);
+    expect((depois?.apoios ?? 0) - (antes?.apoios ?? 0)).toBe(STATUS_PUBLICOS.length);
   });
 });

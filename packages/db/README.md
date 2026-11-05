@@ -69,7 +69,7 @@ pnpm db:migrate
 
 O site usa `DATABASE_URL_LEITURA` com o login só de leitura `lumens_site` (SCRUM-87), criado pelo
 mesmo `pnpm db:provision` com a senha de `POSTGRES_SITE_PASSWORD`. Ele precisa existir antes de
-`db:migrate`, porque a migração `0006_views_publicas` concede a ele `SELECT` nas sete
+`db:migrate`, porque a migração `0006_views_publicas` concede a ele `SELECT` nas oito
 [views públicas](#views-públicas-contrato-com-o-site) e nada mais.
 
 O provisionamento pode ser reaplicado para rotacionar `POSTGRES_APP_PASSWORD` ou
@@ -85,11 +85,14 @@ nunca imprime URLs ou senhas.
 
 ## Views públicas (contrato com o site)
 
-SCRUM-87 · T14. O site lê o banco **só** por estas sete views, com o login `lumens_site`. Ele recebe
+SCRUM-87 · T14. O site lê o banco **só** por estas oito views, com o login `lumens_site`. Ele recebe
 `permission denied` (SQLSTATE `42501`) em qualquer tabela, então nem um bug no código do site
 consegue ler telefone, e-mail ou quem apoiou, relatou ou se voluntariou (RNF01). As garantias:
 
-- **Pauta pública** é qualquer pauta fora de `em_curadoria` e `recusada`. Linhas de pautas
+- **Pauta pública** é a pauta num destes status, e só neles: `juntando_apoios`, `meta_batida`,
+  `cobrando`, `prometido`, `entregue_em_parte`, `descumprida` e `conquistada`. É uma lista fechada
+  (allowlist), repetida em cada filtro da `0006`: `em_curadoria`, `recusada` e qualquer status que
+  for criado depois ficam escondidos até alguém incluí-los de propósito. Linhas de pautas
   escondidas (eventos, relatos, caminhos, propostas e apoios) não entram no resultado de nenhuma
   view nem nos totais. Isso vale para os dados devolvidos; metadados do planejador (por exemplo,
   `EXPLAIN ANALYZE`) não fazem parte da garantia.
@@ -200,8 +203,17 @@ Pautas conquistadas.
 
 ### `v_atividade`
 
-Os 50 eventos públicos mais recentes de todas as pautas públicas, para o feed de atividade. Ordene
-por `criado_em DESC`; o índice parcial `evento_publico_criado_em_idx` atende essa consulta.
+Todos os eventos públicos de todas as pautas públicas, para o feed de atividade. A view não corta
+nada: quem consulta ordena por `criado_em DESC` e pagina, por exemplo
+`ORDER BY criado_em DESC LIMIT 100 OFFSET 200` ou, por cursor, `WHERE criado_em < $1`. Dois eventos
+podem ter o mesmo `criado_em` e a view não tem id para desempatar; um cursor só por `criado_em`
+pode pular um deles.
+
+A página sai do índice parcial `evento_publico_criado_em_idx` (`criado_em DESC`, só eventos
+públicos), sem ordenar o feed inteiro. Para isso a view já vem ordenada por dentro (com
+`security_barrier`, ela é planejada à parte e não enxerga o `ORDER BY ... LIMIT` de quem consulta)
+e o índice é `DESC` puro: com `NULLS LAST` ele não casa com `ORDER BY criado_em DESC`. Mesmo assim,
+ordene na consulta; o SQL não promete a ordem de uma view.
 
 | Coluna         | Tipo        | Conteúdo                   |
 | -------------- | ----------- | -------------------------- |
@@ -210,3 +222,34 @@ por `criado_em DESC`; o índice parcial `evento_publico_criado_em_idx` atende es
 | `tipo`         | text        | como em `v_linha_do_tempo` |
 | `dados`        | jsonb       | como em `v_linha_do_tempo` |
 | `criado_em`    | timestamptz |                            |
+
+### `v_bloco`
+
+Todos os blocos, inclusive os que não têm pauta pública: o filtro de bloco do site lista todos.
+
+| Coluna            | Tipo | Conteúdo                                 |
+| ----------------- | ---- | ---------------------------------------- |
+| `slug`            | text | identificador público do bloco           |
+| `nome`            | text |                                          |
+| `base_estudantes` | int  | estudantes do bloco, base da meta (RN04) |
+
+### Migrações que mexem no que as views usam
+
+O drizzle-kit não sabe que estas views existem: elas vivem só na migração custom `0006`, fora do
+`schema.ts`. Uma migração gerada que apaga uma coluna usada por uma view, muda o tipo dela ou
+recria um enum que uma view usa (`status_pauta`, `moderacao_relato`, `tipo_caminho`,
+`status_proposta`) falha no `db:migrate` com `cannot drop … because other objects depend on it`
+(ou `cannot alter type of a column used by a view or rule`).
+
+Para fazer a mudança:
+
+1. Crie uma migração custom com `pnpm --filter @lumens/db exec drizzle-kit generate --custom --name <nome>`.
+2. Nela, faça `DROP VIEW` das views afetadas, aplique a mudança (pode copiar o SQL que o
+   `drizzle-kit generate` produziria) e faça `CREATE VIEW` de novo, com `security_barrier`.
+3. Refaça o `GRANT SELECT … TO "lumens_site"`: o grant é da view e some com o `DROP`.
+4. Rode `pnpm --filter @lumens/db exec vitest run src/views-publicas.test.ts`.
+
+**Status novo em `status_pauta`:** decida se ele é público. Se for, inclua-o na allowlist de cada
+view numa migração nova; nos dois casos, inclua-o em `STATUS_PUBLICOS` ou `STATUS_ESCONDIDOS` em
+`src/views-publicas.test.ts`. O teste de classificação lê `enum_range(NULL::status_pauta)` e falha
+enquanto houver status sem classificação.

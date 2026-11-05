@@ -1,5 +1,5 @@
 {
-  "id": "5cba58fc-68f2-4a8c-8cb4-d8696f1f8210",
+  "id": "9b89bdc3-e084-491d-8d9d-2a71fd7d5465",
   "prevId": "f4a726fb-0854-4f7b-ad5d-bae15e43a821",
   "version": "7",
   "dialect": "postgresql",
@@ -720,7 +720,7 @@
               "expression": "criado_em",
               "isExpression": false,
               "asc": false,
-              "nulls": "last"
+              "nulls": "first"
             }
           ],
           "isUnique": false,

@@ -1,6 +1,6 @@
 {
-  "id": "e18ffdda-d9ab-458a-82fe-42d37957f387",
-  "prevId": "5cba58fc-68f2-4a8c-8cb4-d8696f1f8210",
+  "id": "1185fd16-bbe5-4b8c-aa17-f6769277a1f3",
+  "prevId": "9b89bdc3-e084-491d-8d9d-2a71fd7d5465",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -720,7 +720,7 @@
               "expression": "criado_em",
               "isExpression": false,
               "asc": false,
-              "nulls": "last"
+              "nulls": "first"
             }
           ],
           "isUnique": false,
