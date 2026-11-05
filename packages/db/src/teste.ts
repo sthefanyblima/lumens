@@ -6,7 +6,7 @@ import { migrate as migratePg } from 'drizzle-orm/node-postgres/migrator';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import { Pool } from 'pg';
-import { PAPEL_APLICACAO } from './app-role';
+import { PAPEL_APLICACAO, PAPEL_SITE } from './app-role';
 import type { Db } from './client';
 import { prepararPgBoss } from './pg-boss-admin';
 import * as schema from './schema';
@@ -19,9 +19,9 @@ const PASTA_MIGRACOES = fileURLToPath(new URL('../migrations', import.meta.url))
  */
 export async function criarBancoEmMemoria(): Promise<Db> {
   const cliente = new PGlite();
-  // Em produção, `db:provision` cria o papel antes de `db:migrate`. O PGlite é um cluster novo
+  // Em produção, `db:provision` cria os papéis antes de `db:migrate`. O PGlite é um cluster novo
   // por teste, então o helper reproduz essa pré-condição antes de aplicar as mesmas migrations.
-  await cliente.exec(`CREATE ROLE "${PAPEL_APLICACAO}"`);
+  await cliente.exec(`CREATE ROLE "${PAPEL_APLICACAO}"; CREATE ROLE "${PAPEL_SITE}"`);
   const db = drizzle(cliente, { schema });
   await migrate(db, { migrationsFolder: PASTA_MIGRACOES });
   return db;

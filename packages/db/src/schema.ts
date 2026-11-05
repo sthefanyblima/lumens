@@ -281,7 +281,13 @@ export const eventos = pgTable(
     publico: boolean('publico').notNull().default(false),
     criadoEm: instante('criado_em').notNull().defaultNow(),
   },
-  (t) => [index('evento_pauta_criado_em_idx').on(t.pautaId, t.criadoEm)],
+  (t) => [
+    index('evento_pauta_criado_em_idx').on(t.pautaId, t.criadoEm),
+    // Atividade recente do site (`v_atividade`): os últimos eventos públicos de todas as pautas.
+    index('evento_publico_criado_em_idx')
+      .on(t.criadoEm.desc())
+      .where(sql`${t.publico}`),
+  ],
 );
 
 /** Passo da conversa do bot por telefone. A limpeza diária apaga as linhas com `expiraEm` vencido. */

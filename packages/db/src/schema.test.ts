@@ -504,7 +504,10 @@ describe('migração inicial em Postgres real', () => {
     expect(rows[0]?.meta).toBe(30);
     expect(rows[0]?.criada_em).toBeInstanceOf(Date);
     const { rows: criacoes } = await pool.query<{ column_default: string | null }>(
-      `SELECT column_default FROM information_schema.columns WHERE table_schema = 'public'
+      // Só tabelas: as views públicas (SCRUM-87) repetem esses nomes, e coluna de view não tem default.
+      `SELECT column_default FROM information_schema.columns
+       JOIN information_schema.tables USING (table_schema, table_name)
+       WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
        AND column_name IN ('criado_em', 'criada_em', 'desde', 'aberto_em', 'recebida_em', 'atualizado_em')`,
     );
     expect(criacoes).toHaveLength(9);

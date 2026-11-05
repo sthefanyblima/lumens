@@ -1,6 +1,8 @@
 import type { Pool, PoolClient } from 'pg';
 
 export const PAPEL_APLICACAO = 'lumens_app';
+/** Login só de leitura do site: enxerga apenas as views públicas (SCRUM-87). */
+export const PAPEL_SITE = 'lumens_site';
 
 type CodigoPapelIncompativel = 'PAPEL_MEMBERSHIP_INCOMPATIVEL' | 'PAPEL_OWNERSHIP_INCOMPATIVEL';
 

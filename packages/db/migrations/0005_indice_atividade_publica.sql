@@ -1,0 +1,1 @@
+CREATE INDEX "evento_publico_criado_em_idx" ON "evento" USING btree ("criado_em" DESC NULLS LAST) WHERE "evento"."publico";

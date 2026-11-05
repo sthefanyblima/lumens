@@ -20,6 +20,7 @@ const chavesBackend = [
   'DATABASE_URL_TESTE',
   'DATABASE_URL_MIGRACAO',
   'POSTGRES_APP_PASSWORD',
+  'POSTGRES_SITE_PASSWORD',
   'CHAVE_CIFRA',
   'CHAVE_HMAC',
   'META_TOKEN',
@@ -46,7 +47,7 @@ function ambienteLimpo() {
 function envBackendCompleto() {
   return [
     'DATABASE_URL=postgresql://lumens_app:senha@localhost:5432/lumens',
-    'DATABASE_URL_LEITURA=postgresql://lumens_app:senha@localhost:5432/lumens',
+    'DATABASE_URL_LEITURA=postgresql://lumens_site:senha@localhost:5432/lumens',
     `CHAVE_CIFRA=${Buffer.alloc(32, 1).toString('base64')}`,
     `CHAVE_HMAC=${Buffer.alloc(32, 2).toString('base64')}`,
     'META_TOKEN=token',
