@@ -155,6 +155,33 @@ describe('transicionarStatus', () => {
     expect((await eventosDa(pauta.id))[0]?.publico).toBe(false);
   });
 
+  it('ir para meta_batida grava meta_batida_em quando ainda está vazio', async () => {
+    const pauta = await criarPauta(db, { status: 'juntando_apoios' });
+    const agora = new Date('2026-11-05T12:00:00.000Z');
+
+    await db.transaction((tx) =>
+      transicionarStatus(tx, { pautaId: pauta.id, para: 'meta_batida', origem: 'bot', agora }),
+    );
+
+    expect((await lerPauta(pauta.id))?.metaBatidaEm).toEqual(agora);
+  });
+
+  it('ir para meta_batida não sobrescreve meta_batida_em já gravado', async () => {
+    const antes = new Date('2026-11-01T09:00:00.000Z');
+    const pauta = await criarPauta(db, { status: 'juntando_apoios', metaBatidaEm: antes });
+
+    await db.transaction((tx) =>
+      transicionarStatus(tx, {
+        pautaId: pauta.id,
+        para: 'meta_batida',
+        origem: 'bot',
+        agora: new Date('2026-11-05T12:00:00.000Z'),
+      }),
+    );
+
+    expect((await lerPauta(pauta.id))?.metaBatidaEm).toEqual(antes);
+  });
+
   it('aprovar grava aprovada_em com o relógio de quem chama', async () => {
     const pauta = await criarPauta(db, { status: 'em_curadoria' });
     const agora = new Date('2026-11-05T12:00:00.000Z');

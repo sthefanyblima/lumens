@@ -5,7 +5,7 @@
  * linha do tempo. A regra central do Lumens fica aqui: só a apuração da conferência, pelo
  * agendador, leva a pauta a um resultado. Nem owner nem curadoria marcam conquista.
  */
-import { eq, pautas, type StatusPauta, type Tx } from '@lumens/db';
+import { eq, pautas, sql, type StatusPauta, type Tx } from '@lumens/db';
 import { ErroDeRegra } from './erros';
 import { registrarEvento, type OrigemEvento } from './eventos';
 
@@ -86,6 +86,10 @@ export async function transicionarStatus(
     .set({
       status: para,
       ...(para === 'juntando_apoios' && { aprovadaEm: agora }),
+      // Só preenche se ainda estiver vazio: quem bateu a meta pelo apoio já gravou o instante.
+      ...(para === 'meta_batida' && {
+        metaBatidaEm: sql`coalesce(${pautas.metaBatidaEm}, ${agora.toISOString()}::timestamptz)`,
+      }),
       ...(para === 'recusada' && { motivoRecusa: motivoLimpo }),
     })
     .where(eq(pautas.id, pautaId));
