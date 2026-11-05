@@ -24,17 +24,19 @@ Pendente.
 
 ## Entrega
 
-- [x] Sete views públicas na migração `0006_views_publicas.sql`, sem id, HMAC, cifra, telefone ou
+- [x] Oito views públicas na migração `0006_views_publicas.sql`, sem id, HMAC, cifra, telefone ou
       e-mail; a pauta sai pelo `slug`.
 - [x] Pautas `em_curadoria`/`recusada`, relatos não aprovados e eventos não públicos ficam de fora.
 - [x] "Próxima etapa" derivada do status em `v_pauta_publica`.
 - [x] Login `lumens_site` provisionado por `pnpm db:provision` (senha `POSTGRES_SITE_PASSWORD`),
-      com `SELECT` só nas sete views e nada nas tabelas, inclusive nas futuras.
+      com `SELECT` só nas oito views e nada nas tabelas, inclusive nas futuras.
 - [x] `DATABASE_URL_LEITURA` aponta para `lumens_site` em `.env.example`, CI e README.
-- [x] Índice parcial `evento_publico_criado_em_idx` para `v_atividade`.
+- [x] Índice parcial `evento_publico_criado_em_idx` (`criado_em DESC`) para paginar `v_atividade`.
+- [x] `v_atividade` sem corte de 50; `v_bloco` com todos os blocos; status públicos como allowlist.
+- [x] README do pacote avisa que o drizzle-kit não conhece as views.
 - [x] Colunas de cada view documentadas em `packages/db/README.md`.
 - [x] Testes em PGlite (rodam sem Docker) e testes com o login real em `privileges.test.ts`.
-- [x] `pnpm typecheck`, `pnpm lint`, `pnpm format:check` e `pnpm test` (603 testes) passaram.
+- [x] `pnpm typecheck`, `pnpm lint`, `pnpm format:check` e `pnpm test` (611 testes) passaram.
 
 ## Desvios do ticket
 
@@ -44,6 +46,11 @@ Pendente.
   público `status_alterado` com `para = conquistada`.
 - **Migração em duas partes:** `0005_indice_atividade_publica.sql` (gerada pelo drizzle-kit a partir
   do schema) e `0006_views_publicas.sql` (custom), como na SCRUM-78 (0002 + 0003).
+- **`v_atividade` ordenada por dentro:** a view tem `ORDER BY e.criado_em DESC` (sem LIMIT). Não
+  corta nada; existe porque, com `security_barrier`, sem ele a paginação ordenava o feed inteiro.
+- **`0005` regerada:** o índice passou de `DESC NULLS LAST` para `DESC`; a migração não tinha sido
+  mergeada.
+- **`v_bloco`:** oitava view, fora da tabela do ticket, pedida pelo filtro de bloco do site.
 - **`security_barrier`:** acrescentado às views; o ticket não pedia, mas sem ele um filtro de quem
   consulta poderia rodar antes do filtro da view.
 

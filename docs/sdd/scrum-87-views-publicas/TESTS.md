@@ -10,13 +10,13 @@ linha. Os valores esperados nunca saem da própria view.
 
 O banco em memória recebe as mesmas migrações e o seed; as consultas rodam com `SET ROLE lumens_site`.
 
-- [principal] **instala exatamente as sete views** — oráculo: lista do ticket.
+- [principal] **instala exatamente as oito views** — oráculo: lista do ticket.
 - [segurança] **lumens_site lê cada view** (7 casos).
 - [segurança] **permission denied em toda tabela do schema public** — oráculo: `42501` para cada
   tabela listada em `pg_tables`; a lista precisa conter `estudante`, `relato`, `apoio`… para o laço
   não passar vazio.
 - [segurança] **permission denied em `SELECT * FROM estudante`** — critério literal do ticket.
-- [segurança] **só SELECT, só nas sete views** — `information_schema.role_table_grants`.
+- [segurança] **só SELECT, só nas oito views** — `information_schema.role_table_grants`.
 - [segurança] **tabela e view futuras não chegam ao site** — cria as duas como owner e espera `42501`.
 - [segurança] **não escreve nas views**.
 - [segurança] **nenhuma coluna proibida** — `information_schema.columns` das views contra
@@ -36,7 +36,18 @@ O banco em memória recebe as mesmas migrações e o seed; as consultas rodam co
 - [negativo] **evento não público de pauta pública** não aparece.
 - [negativo] **relato aprovado de pauta em curadoria** não aparece.
 - [fronteira] **`Falta 1 apoio`** no singular e **`Meta alcançada`** quando não falta nenhum.
-- [fronteira] **v_atividade limita a 50** com 60 eventos novos.
+- [fronteira] **v_atividade sem corte**: com 60 eventos novos, os 85 públicos voltam; a página
+  `LIMIT 100 OFFSET 50` traz 35.
+- [desempenho] **índice na ordem da paginação**: `evento_publico_criado_em_idx` é
+  `(criado_em DESC) WHERE publico`, sem `NULLS LAST`.
+- [dados] **v_bloco** traz os seis blocos do seed com nome e base de estudantes.
+- [negativo] **v_bloco com bloco sem pauta e bloco só com pauta em curadoria**: os dois aparecem.
+- [segurança] **classificação do enum**: todo valor de `enum_range(NULL::status_pauta)` está em
+  `STATUS_PUBLICOS` ou `STATUS_ESCONDIDOS`, e as duas listas juntas são exatamente o enum.
+- [segurança] **cada view mostra exatamente os status públicos**: uma pauta por status, com evento
+  público, relato aprovado, caminho e proposta; `v_pauta_publica`, `v_relato_publico`, os dois
+  ramos de `v_caminho_publico`, `v_linha_do_tempo` e `v_atividade` mostram só as sete públicas.
+- [segurança] **`v_resumo.apoios` por status**: um apoio em cada uma das nove pautas soma 7.
 - [negativo] **caminho e proposta de pauta em curadoria ou recusada** não aparecem em
   `v_caminho_publico` (o seed não tem nenhum nessas pautas).
 - [fronteira] **dois Fala.BR**: o aberto por último sem prazo dá `Aguardando resposta`; um mais
@@ -50,7 +61,7 @@ O banco em memória recebe as mesmas migrações e o seed; as consultas rodam co
 ## Casos — PostgreSQL real (CI)
 
 - `privileges.test.ts` · **login real do site**: autentica como `lumens_site` por
-  `DATABASE_URL_LEITURA`; lê as sete views; recebe `42501` em cada tabela do schema `public`, em
+  `DATABASE_URL_LEITURA`; lê as oito views; recebe `42501` em cada tabela do schema `public`, em
   `pgboss.job` e em `drizzle.__drizzle_migrations`.
 - `app-role.test.ts` · **provisiona o login do site** com `POSTGRES_SITE_PASSWORD`, sem atributos
   elevados, e a senha da aplicação não autentica; **rejeita `POSTGRES_SITE_PASSWORD` ausente** antes
@@ -77,7 +88,20 @@ Cada mutação abaixo, aplicada sozinha, derruba exatamente o teste indicado (1 
 | contar apoios de `em_curadoria` em `v_resumo`                         | `v_resumo` não conta apoio de pauta em curadoria     |
 | expor `e.dados` sem filtrar as chaves                                 | tira de dados as chaves de id interno                |
 
-Com a migração correta, os 34 passam.
+Mutações da terceira rodada, cada uma aplicada sozinha:
+
+| Mutação                                                          | Testes que falham                                                     |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `LIMIT 50` de volta em `v_atividade`                             | v_atividade sem corte                                                 |
+| `v_bloco` só com blocos de pauta pública                         | bloco sem pauta e bloco só com pauta escondida                        |
+| `v_bloco` fora do GRANT                                          | lê v_bloco; só SELECT nas oito; os dois testes de v_bloco             |
+| `conquistada` fora da allowlist de `v_linha_do_tempo`            | v_linha_do_tempo com o seed; cada view mostra exatamente os públicos  |
+| `descumprida` fora da allowlist do ramo de proposta              | v_caminho_publico com o seed; cada view mostra exatamente os públicos |
+| `prometido` fora da allowlist de `v_resumo.apoios`               | os dois testes de `v_resumo`                                          |
+| `ALTER TYPE status_pauta ADD VALUE 'arquivada'` no fim da `0006` | classificação do enum                                                 |
+| índice da `0005` com `DESC NULLS LAST`                           | índice na ordem da paginação                                          |
+
+Com as migrações corretas, os 41 passam.
 
 ## Lacunas
 
@@ -86,5 +110,10 @@ Com a migração correta, os 34 passam.
 - Ataque com função temporária vazando linhas antes do filtro não é exercitado; o teste confere
   apenas que `security_barrier` está ligado.
 - Fora as chaves `id`/`*_id`, o conteúdo de `evento.dados` não é varrido; isso cabe à SCRUM-89.
+- O plano de `v_atividade` (nested loop pelo índice, sem ordenar o feed inteiro) foi conferido à
+  mão com `EXPLAIN` como `lumens_site` num PostgreSQL 17 com 40 mil eventos; nenhum teste automático
+  confere o plano, só a definição do índice.
+- Uma troca de allowlist por `NOT IN` não muda nenhum resultado com o enum atual, então nenhum teste
+  de dados a pega; quem pega o efeito dela é o teste de classificação, quando o enum ganhar valor.
 - Contagens do planejador (`EXPLAIN ANALYZE` como `lumens_site`) revelam quantas linhas os filtros
   descartaram; isso fica fora da garantia e não é testado.

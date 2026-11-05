@@ -4,7 +4,7 @@
 
 ## Abordagem
 
-Criar as sete views numa migração custom do drizzle-kit, rodando com os privilégios do owner (sem
+Criar as oito views numa migração custom do drizzle-kit, rodando com os privilégios do owner (sem
 `security_invoker`) e com `security_barrier`. Provisionar `lumens_site` com o mesmo código que já
 endurece `lumens_app`, mudando só o nome e a variável da senha. Na migração, revogar tudo de
 `lumens_site` nas tabelas e sequências e conceder `SELECT` só nas views.
@@ -30,16 +30,39 @@ endurece `lumens_app`, mudando só o nome e a variável da senha. Na migração,
   por sufixo, não por lista fechada, para cobrir tipos de evento futuros; payload que não é objeto
   vira `{}`.
 - **Data da conquista:** evento público `status_alterado` com `dados.para = 'conquistada'`.
-- **Feed de atividade:** `v_atividade` traz os 50 mais recentes (`ORDER BY criado_em DESC LIMIT 50`).
-  Índice parcial `evento (criado_em DESC) WHERE publico`; os demais caminhos já têm índice (PKs e
-  índices por `pauta_id`).
+- **Status públicos como allowlist:** cada filtro usa `status IN ('juntando_apoios', 'meta_batida', 'cobrando', 'prometido', 'entregue_em_parte', 'descumprida', 'conquistada')`, e não
+  `NOT IN ('em_curadoria', 'recusada')`. Um status novo nasce escondido. A lista fica inline, sem
+  função `pauta_publica(status)`: o EXECUTE de função chamada numa view é conferido contra quem
+  consulta, não contra o owner; a função exigiria EXECUTE para `lumens_site` (hoje vem de PUBLIC) e
+  seria mais um objeto a proteger. Um teste lê `enum_range(NULL::status_pauta)` e obriga a
+  classificar todo valor como público ou escondido.
+- **Feed de atividade sem corte:** `v_atividade` traz todos os eventos públicos; quem consulta
+  ordena por `criado_em DESC` e pagina (SCRUM-88 aceita até 100 por página; SCRUM-57 pagina
+  `/atividade`). O plano foi conferido com `EXPLAIN` como `lumens_site` num PostgreSQL 17 com 40 mil
+  eventos:
+  - sem ordem própria, a view com `security_barrier` é planejada à parte, não vê o `LIMIT` de fora,
+    junta tudo, calcula `dados` de cada evento e só depois ordena (custo estimado ~28 mil);
+  - com `ORDER BY e.criado_em DESC` dentro da view (sem LIMIT) e o índice parcial como `criado_em
+DESC` (NULLS FIRST), a página sai do índice por nested loop (custo ~213), inclusive com OFFSET e
+    com cursor `WHERE criado_em < $1`, que vira `Index Cond`;
+  - com o índice `DESC NULLS LAST` gerado antes, o planejador ordenava de novo, porque ele não casa
+    com `ORDER BY criado_em DESC`. Por isso a `0005` (ainda não mergeada) foi regerada com
+    `.desc().nullsFirst()`.
+    Os demais caminhos já têm índice (PKs e índices por `pauta_id`).
+- **`v_bloco`:** o filtro de bloco do site lista todos os blocos, inclusive os sem pauta pública
+  (`apps/site`, tipo `Bloco { slug, nome, base_estudantes }`). A view expõe exatamente essas três
+  colunas de `bloco`, sem filtro; bloco não tem dado pessoal.
+- **Views fora do drizzle-kit:** o `schema.ts` não declara as views, então uma migração gerada que
+  apaga coluna, muda tipo ou recria enum usado por elas falha. O README do pacote explica o caminho
+  (custom migration com DROP/CREATE VIEW e GRANT de novo).
 - **Fora de escopo:** API REST (SCRUM-88), varredura de identidade no CI (SCRUM-89), validação do
   JSONB de `evento.dados` no banco.
 
 ## Passos
 
-1. Índice parcial no `schema.ts` e `drizzle-kit generate` → `0005_indice_atividade_publica.sql`.
-2. `drizzle-kit generate --custom --name views_publicas` → `0006_views_publicas.sql` com as sete
+1. Índice parcial no `schema.ts` (`criado_em DESC`, NULLS FIRST) e `drizzle-kit generate` →
+   `0005_indice_atividade_publica.sql`.
+2. `drizzle-kit generate --custom --name views_publicas` → `0006_views_publicas.sql` com as oito
    views, `REVOKE ALL` em tabelas e sequências, `USAGE` no schema e `SELECT` nas views.
 3. `PAPEL_SITE` em `app-role.ts`; `executarProvisionamento({ papel: 'site' })` em
    `provision-app-role.ts`; o CLI provisiona os dois papéis.
