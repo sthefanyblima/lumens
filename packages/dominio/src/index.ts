@@ -54,3 +54,6 @@ export type { CodigoErroDeRegra } from './erros';
 
 export { TIPOS_EVENTO, registrarEvento } from './eventos';
 export type { DadosPorTipo, NovoEventoDeDominio, OrigemEvento, TipoEvento } from './eventos';
+
+export { TRANSICOES, podeTransicionar, transicionarStatus } from './status';
+export type { Transicao } from './status';

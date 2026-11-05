@@ -7,7 +7,12 @@
  *
  * `codigo` é estável: o bot e o painel traduzem por ele, não pela mensagem.
  */
-export type CodigoErroDeRegra = 'evento_desconhecido' | 'dados_pessoais_no_evento';
+export type CodigoErroDeRegra =
+  | 'evento_desconhecido'
+  | 'dados_pessoais_no_evento'
+  | 'pauta_inexistente'
+  | 'transicao_invalida'
+  | 'motivo_obrigatorio';
 
 export class ErroDeRegra extends Error {
   constructor(

@@ -10,19 +10,29 @@ Toda função de regra segue o mesmo desenho: **valida → grava → registra o 
 transação de quem chama.
 
 ```ts
-import { eq, pautas, type Tx } from '@lumens/db';
+import { eq, propostas, type Tx } from '@lumens/db';
 import { registrarEvento } from './eventos';
 
-export async function aprovarPauta(tx: Tx, { pautaId }: { pautaId: string }) {
+export async function registrarExecucaoProposta(
+  tx: Tx,
+  {
+    pautaId,
+    propostaId,
+    agora = new Date(),
+  }: { pautaId: string; propostaId: string; agora?: Date },
+) {
   // 1. valida (lendo o que precisar com a mesma tx)
   // 2. grava
-  await tx.update(pautas).set({ status: 'juntando_apoios' }).where(eq(pautas.id, pautaId));
+  await tx
+    .update(propostas)
+    .set({ status: 'executada', executadaEm: agora })
+    .where(eq(propostas.id, propostaId));
   // 3. registra o evento: se algo falhar depois, a ação e o evento somem juntos
   await registrarEvento(tx, {
     pautaId,
-    tipo: 'status_alterado',
-    dados: { de: 'em_curadoria', para: 'juntando_apoios' },
-    origem: 'curadoria',
+    tipo: 'proposta_executada',
+    dados: { proposta_id: propostaId },
+    origem: 'bot',
   });
 }
 ```
@@ -31,10 +41,18 @@ Quem chama abre a transação e pode compor várias regras nela:
 
 ```ts
 await db.transaction(async (tx) => {
-  await aprovarPauta(tx, { pautaId });
-  await outraRegra(tx, { pautaId });
+  await registrarPromessa(tx, { pautaId /* ... */ });
+  await transicionarStatus(tx, { pautaId, para: 'prometido', origem: 'curadoria' });
 });
 ```
+
+### Status da pauta
+
+`pauta.status` só muda por `transicionarStatus`, que aceita apenas as transições de
+`TRANSICOES` e grava `status_alterado`. `podeTransicionar(de, para)` é a versão pura, para o
+painel decidir quais botões mostrar. Os resultados da conferência (`conquistada`,
+`entregue_em_parte`, `descumprida`) só são aceitos com `origem: 'agendador'`: nem owner nem
+curadoria marcam conquista.
 
 ### Recusa ou erro?
 
