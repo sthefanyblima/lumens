@@ -57,3 +57,6 @@ export type { DadosPorTipo, NovoEventoDeDominio, OrigemEvento, TipoEvento } from
 
 export { TRANSICOES, podeTransicionar, transicionarStatus } from './status';
 export type { Transicao } from './status';
+
+export { registrarApoio } from './apoio';
+export type { NovoApoio, ResultadoApoio } from './apoio';

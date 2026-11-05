@@ -12,6 +12,6 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "node --env-file-if-exists=../../.env.database ../../node_modules/vitest/vitest.mjs run --passWithNoTests"
   }
 }
