@@ -29,6 +29,7 @@ lumens/
 │   └── painel/           Next.js: painel de curadoria       (parte 5)
 ├── docker/init/          scripts SQL do banco local         (parte 1)
 └── packages/
+    ├── contratos/        tipos da API de leitura pública    (parte 1)
     ├── db/               esquema, migrações, views, seed    (parte 1)
     └── dominio/          regras de negócio + testes         (parte 1)
 ```
@@ -232,6 +233,13 @@ Pendências da parte 2:
 - Handlers das histórias 2.4, 2.5 e 2.6 são placeholders (`TODO` em
   `src/bot/conversation/handlers.ts`).
 - Verificar o webhook no painel da Meta e medir resposta < 5 s (critério de pronto da 2.1).
+
+## API de leitura pública
+
+O mesmo servidor do `pnpm dev` (`:3001`) serve a API REST só de leitura do site: `GET /resumo`,
+`/blocos`, `/pautas`, `/pautas/:slug`, `/conquistas` e `/atividade`, sem login, pelo login
+`lumens_site` (`DATABASE_URL_LEITURA`). As origens aceitas no CORS vêm de `CORS_ORIGENS`. Rotas,
+campos e exemplos: [docs/api.md](docs/api.md). Os tipos das respostas ficam em `@lumens/contratos`.
 
 ## Como contribuir
 
