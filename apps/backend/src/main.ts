@@ -54,6 +54,11 @@ async function iniciar(env: Env): Promise<void> {
       logger.error({ erro: resumoDoErro(erro) }, 'conexão do banco caiu');
     });
     const db = criarDb(pool);
+    // Segunda conexão, com o login `lumens_site`: a API de leitura pública só enxerga as views
+    // da T14, então nem um bug nela alcança telefone, e-mail ou quem apoiou (RNF01).
+    const poolLeitura = criarPool(env.DATABASE_URL_LEITURA, POOL_TIMEOUTS, (erro) => {
+      logger.error({ erro: resumoDoErro(erro) }, 'conexão de leitura do banco caiu');
+    });
 
     // `db:migrate` instala/atualiza o schema `pgboss` com a role administrativa. A aplicação
     // apenas opera as filas; manutenção de índices também fica fora da role restrita.
@@ -80,6 +85,7 @@ async function iniciar(env: Env): Promise<void> {
       queue,
       logger,
       chaves,
+      leitura: { db: criarDb(poolLeitura), origensCors: env.CORS_ORIGENS },
     });
     await app.listen({ port: env.PORT, host: '0.0.0.0' });
 
@@ -92,6 +98,7 @@ async function iniciar(env: Env): Promise<void> {
         await app.close();
         await boss.stop({ graceful: true });
         await pool.end();
+        await poolLeitura.end();
         process.exit(0);
       } catch (err) {
         logger.error({ erro: resumoDoErro(err) }, 'erro no encerramento');

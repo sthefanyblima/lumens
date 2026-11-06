@@ -1,0 +1,17 @@
+{
+  "name": "@lumens/contratos",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Contrato (esquemas zod e tipos) da API de leitura pública, usado pelo back-end e pelo site.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  }
+}

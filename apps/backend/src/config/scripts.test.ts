@@ -35,6 +35,7 @@ const chavesBackend = [
   'AWS_REGION',
   'S3_BUCKET_FOTOS',
   'S3_ENDPOINT',
+  'CORS_ORIGENS',
   'SENTINELA_ADMIN',
 ];
 

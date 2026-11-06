@@ -150,6 +150,32 @@ describe('carregarEnv', () => {
     expect(mensagemDeErro({ ...ambienteCompleto(), LOG_LEVEL: 'verbose' })).toContain('LOG_LEVEL');
   });
 
+  it('usa a origem do site em produção quando CORS_ORIGENS está ausente ou vazia', () => {
+    for (const fonte of [ambienteCompleto(), { ...ambienteCompleto(), CORS_ORIGENS: '' }]) {
+      expect(carregarEnv(fonte).CORS_ORIGENS).toEqual(['https://lumens-ufal.vercel.app']);
+    }
+  });
+
+  it('separa CORS_ORIGENS por vírgula e ignora espaços', () => {
+    const env = carregarEnv({
+      ...ambienteCompleto(),
+      CORS_ORIGENS: 'http://localhost:3000, https://lumens-ufal.vercel.app',
+    });
+
+    expect(env.CORS_ORIGENS).toEqual(['http://localhost:3000', 'https://lumens-ufal.vercel.app']);
+  });
+
+  it.each([
+    'https://lumens-ufal.vercel.app/',
+    'lumens-ufal.vercel.app',
+    'https://x.app/pautas',
+    ',',
+  ])('recusa CORS_ORIGENS que nunca casaria com o header Origin (%s)', (valor) => {
+    expect(mensagemDeErro({ ...ambienteCompleto(), CORS_ORIGENS: valor })).toContain(
+      'CORS_ORIGENS',
+    );
+  });
+
   it('preserva opcional preenchida', () => {
     const env = carregarEnv({ ...ambienteCompleto(), S3_ENDPOINT: 'http://localhost:9000' });
 

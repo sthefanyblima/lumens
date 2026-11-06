@@ -47,6 +47,25 @@ const chaveDe32Bytes = obrigatoria
     "precisa ter 32 bytes — gere com: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"",
   );
 
+/**
+ * Lista de origens separadas por vírgula, cada uma no formato exato do header `Origin`
+ * (esquema, host e porta; sem caminho nem barra final). Com barra final a origem nunca casaria
+ * e o site ficaria sem CORS sem nenhum aviso; por isso a validação recusa.
+ */
+const origens = z
+  .string()
+  .transform((valor) =>
+    valor
+      .split(',')
+      .map((origem) => origem.trim())
+      .filter((origem) => origem !== ''),
+  )
+  .refine((lista) => lista.length > 0, 'precisa de pelo menos uma origem')
+  .refine(
+    (lista) => lista.every((origem) => URL.canParse(origem) && new URL(origem).origin === origem),
+    'cada origem precisa ser esquema://host[:porta], sem caminho nem barra final — ex.: https://lumens-ufal.vercel.app',
+  );
+
 const esquema = z
   .object({
     // Servidor HTTP (webhook da Meta; a API entra no mesmo servidor)
@@ -60,6 +79,9 @@ const esquema = z
     LOG_LEVEL: comPadrao(
       z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
     ),
+
+    // API de leitura: origens do site que podem chamá-la pelo navegador (CORS)
+    CORS_ORIGENS: comPadrao(origens.default(['https://lumens-ufal.vercel.app'])),
 
     // Banco
     DATABASE_URL: obrigatoria,
