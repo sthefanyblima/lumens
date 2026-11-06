@@ -16,6 +16,7 @@ import { DEDUP_TTL_MS, deleteOldDedup, conteudoDoJob } from './process';
 const config = { verifyToken: 'verify-SECRET-123', appSecret: 'segredo-app' };
 const chaves: Chaves = { cifra: Buffer.alloc(32, 1), hmac: Buffer.alloc(32, 2) };
 const PHONE = '5582988887777';
+const leitura = { origensCors: [] };
 
 const jobs = mensagensNaFila;
 
@@ -64,7 +65,7 @@ describe('webhook da Meta', () => {
     queue = new FakeQueue();
     logs = [];
     const logger = pino({ level: 'debug' }, { write: (linha: string) => logs.push(linha) });
-    app = await buildApp({ config, db, queue, logger, chaves });
+    app = await buildApp({ config, db, queue, logger, chaves, leitura: { ...leitura, db } });
   }, 20_000);
   afterEach(async () => {
     await app.close();
@@ -333,7 +334,14 @@ describe('webhook da Meta', () => {
   });
 
   it('outras rotas continuam com parser JSON normal', async () => {
-    const other = await buildApp({ config, db, queue, logger: pino({ level: 'silent' }), chaves });
+    const other = await buildApp({
+      config,
+      db,
+      queue,
+      logger: pino({ level: 'silent' }),
+      chaves,
+      leitura: { ...leitura, db },
+    });
     other.post('/echo', (req) => req.body);
     const res = await other.inject({ method: 'POST', url: '/echo', payload: { a: 1 } });
     expect(res.json()).toEqual({ a: 1 });
