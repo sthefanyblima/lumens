@@ -31,30 +31,31 @@ export default function Privacidade() {
           UFAL e não fala em nome da universidade.
         </p>
         <p>
-          O sistema está em desenvolvimento. As pautas exibidas hoje no site são dados de exemplo.
+          O sistema está em desenvolvimento. As pautas exibidas hoje no site são dados de exemplo, e
+          o bot ainda não executa os fluxos de verificação, relato e nova pauta — ele responde
+          confirmando o recebimento. Mesmo assim,{' '}
+          <strong>o que você envia chega e é guardado</strong>, então esta página descreve o que
+          acontece de verdade hoje.
         </p>
       </section>
 
       <section className={estilos.secao}>
         <h2 className={estilos.secaoTitulo}>O que coletamos</h2>
-        <p>Pela conversa no WhatsApp, conforme o que você escolhe fazer:</p>
+        <p>Pela conversa no WhatsApp:</p>
         <ul>
           <li>
             <strong>Seu número de telefone</strong>, que chega junto com a mensagem
           </li>
           <li>
-            <strong>Seu e-mail institucional</strong>, se você optar por se verificar como estudante
-          </li>
-          <li>
-            <strong>Seu curso</strong>, informado na verificação
-          </li>
-          <li>
-            <strong>O texto do relato</strong> e, opcionalmente, <strong>uma foto</strong>
+            <strong>O conteúdo das mensagens que você envia</strong>, qualquer que seja — texto,
+            e-mail que você digite, ou o identificador de uma foto
           </li>
         </ul>
         <p>
-          Só aceitamos e-mail dos domínios da UFAL. A verificação existe para confirmar que quem
-          apoia uma pauta é da comunidade universitária — não para identificar você publicamente.
+          Os passos que pedem e-mail institucional, curso e relato{' '}
+          <strong>ainda não estão implementados</strong>. Não há, hoje, verificação de domínio de
+          e-mail nem envio de código: se você digitar um endereço, ele é apenas guardado como
+          qualquer outra mensagem. Não tratamos ninguém como estudante verificado.
         </p>
       </section>
 
@@ -63,7 +64,8 @@ export default function Privacidade() {
         <h2 className={estilos.secaoTitulo}>Como protegemos</h2>
         <ul>
           <li>
-            <strong>Telefone e e-mail são cifrados</strong> no banco, com AES-256-GCM.
+            <strong>Seu telefone é cifrado</strong> no banco, com AES-256-GCM, assim como o conteúdo
+            das mensagens e as respostas que o bot envia.
           </li>
           <li>
             <strong>A busca pelo seu telefone não decifra nada.</strong> Guardamos também um código
@@ -71,15 +73,28 @@ export default function Privacidade() {
             conversa.
           </li>
           <li>
-            <strong>Fotos perdem todos os metadados.</strong> Antes de qualquer armazenamento,
-            removemos EXIF, GPS, XMP, IPTC e perfil de cor. A localização de onde a foto foi tirada
-            não sobrevive ao envio.
-          </li>
-          <li>
             <strong>O estado da conversa dura 24 horas.</strong> Depois disso ele expira, e uma
             rotina diária apaga o que expirou.
           </li>
         </ul>
+      </section>
+
+      {/* removerMetadados existe em apps/backend/src/fotos/imagem.ts, mas o fluxo ainda não a
+          chama: newAskPhoto guarda só o id da mídia (TODO 2.6 em handlers.ts). Enquanto for
+          assim, este aviso fica. Ao integrar, mover a foto para a seção acima. */}
+      <section className={estilos.secao}>
+        <h2 className={estilos.secaoTitulo}>Atenção com fotos</h2>
+        <p>
+          <strong>Hoje não removemos os metadados das fotos.</strong> Quando você envia uma imagem,
+          guardamos apenas o identificador dela, e o arquivo permanece nos servidores do WhatsApp
+          como você enviou — com EXIF, e possivelmente com a localização de onde a foto foi tirada.
+        </p>
+        <p>
+          A remoção de metadados já existe em código, mas ainda não está ligada ao recebimento. Até
+          que esteja,{' '}
+          <strong>evite enviar fotos cuja localização ou data você não queira registrar</strong>.
+          Esta página será atualizada quando isso mudar.
+        </p>
       </section>
 
       {/* owners só com papel e curso: apps/site/src/dados/tipos.ts
@@ -101,19 +116,23 @@ export default function Privacidade() {
         </p>
       </section>
 
-      {/* RN08, conferência de anonimato: packages/dominio/src/anonimato.ts */}
+      {/* RN08: conferirAnonimato roda dentro de montarTextoFalaBr (texto-falabr.ts), mas nenhum
+          fluxo do bot chama esse gerador ainda. Por isso o parágrafo final. */}
       <section className={estilos.secao}>
         <h2 className={estilos.secaoTitulo}>Quando a pauta vai para o Fala.BR</h2>
         <p>
-          Pautas que atingem a meta podem ser levadas ao Fala.BR, o sistema federal de
+          Pautas que atingem a meta poderão ser levadas ao Fala.BR, o sistema federal de
           manifestações. Isso é feito manualmente por uma pessoa responsável, e o texto protocolado
           vira documento público.
         </p>
         <p>
-          Por isso, antes do envio o texto passa por uma conferência que{' '}
+          Por isso, o gerador desse texto já inclui uma conferência que{' '}
           <strong>bloqueia o envio</strong> se encontrar nome de pessoa que o sistema conhece,
           e-mail, telefone ou matrícula. Trechos que apenas sugerem um nome geram um aviso para quem
           revisa decidir.
+        </p>
+        <p>
+          Nenhuma pauta foi levada ao Fala.BR até hoje: esse fluxo ainda não está em funcionamento.
         </p>
       </section>
 
