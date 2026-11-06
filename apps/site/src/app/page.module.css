@@ -67,3 +67,10 @@
     800 1.5em var(--fonte-titulo),
     sans-serif;
 }
+
+.rodape {
+  margin-top: var(--espaco);
+  padding-top: var(--espaco);
+  border-top: 1px solid var(--borda);
+  font-size: 0.875em;
+}

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { formatarNumero } from '../componentes/BarraApoios';
 import { CardPauta } from '../componentes/CardPauta';
 import { FiltroBloco } from '../componentes/FiltroBloco';
@@ -54,6 +55,9 @@ export default async function Home({
           ))}
         </ul>
       )}
+      <footer className={estilos.rodape}>
+        <Link href="/privacidade">Política de privacidade</Link>
+      </footer>
     </main>
   );
 }

@@ -1,0 +1,69 @@
+.pagina {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--espaco);
+}
+
+.titulo {
+  margin: 0;
+  font:
+    800 1.75em var(--fonte-titulo),
+    sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.resumo {
+  margin: 4px 0 var(--espaco);
+  color: var(--tinta-2);
+}
+
+.secao {
+  margin-bottom: var(--espaco);
+  padding: 12px var(--espaco);
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+}
+
+.secaoTitulo {
+  margin: 0 0 8px;
+  font:
+    700 1.1875em var(--fonte-titulo),
+    sans-serif;
+}
+
+.secao p {
+  margin: 0 0 8px;
+}
+
+.secao p:last-child,
+.secao ul:last-child {
+  margin-bottom: 0;
+}
+
+.secao ul {
+  margin: 0 0 8px;
+  padding-left: 1.25em;
+}
+
+.secao li {
+  margin-bottom: 6px;
+}
+
+.secao li:last-child {
+  margin-bottom: 0;
+}
+
+.rotulo {
+  font:
+    600 0.8125em var(--fonte-rotulo),
+    monospace;
+  color: var(--tinta-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.voltar {
+  display: inline-block;
+  margin-top: var(--espaco);
+}
