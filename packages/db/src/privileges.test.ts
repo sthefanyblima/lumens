@@ -9,7 +9,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { PAPEL_APLICACAO } from './app-role';
+import { PAPEL_APLICACAO, PAPEL_SITE } from './app-role';
 
 const executar = promisify(execFile);
 const nomeBancoSeguro = /^lumens_test_(priv|script|upgrade)_[a-f0-9]{32}$/;
@@ -33,6 +33,14 @@ let urlAdministrativaBase: string;
 let urlAplicacaoBase: string;
 let nomeBancoPrincipal: string;
 let encerrando = false;
+
+/** Uma linha por migração do journal: o total cresce a cada migração nova sem editar o teste. */
+async function totalDeMigracoes() {
+  const journal = JSON.parse(
+    await readFile(join(pastaMigracoes, 'meta', '_journal.json'), 'utf8'),
+  ) as { entries: unknown[] };
+  return String(journal.entries.length);
+}
 
 function observarErrosDoPool(pool: Pool): Pool {
   pool.on('error', (erro: Error & { code?: string }) => {
@@ -351,6 +359,70 @@ describe('privilégios do login real da aplicação', () => {
   });
 });
 
+describe('privilégios do login real do site', () => {
+  const views = [
+    'v_resumo',
+    'v_pauta_publica',
+    'v_relato_publico',
+    'v_caminho_publico',
+    'v_linha_do_tempo',
+    'v_conquista',
+    'v_atividade',
+    'v_bloco',
+  ];
+  let poolSite: Pool;
+
+  beforeAll(() => {
+    const origem = process.env.DATABASE_URL_LEITURA;
+    if (!origem) throw new Error('Defina DATABASE_URL_LEITURA e rode pnpm db:provision.');
+    const url = new URL(origem);
+    if (decodeURIComponent(url.username) !== PAPEL_SITE || !url.hostname) {
+      throw new Error(`DATABASE_URL_LEITURA deve autenticar ${PAPEL_SITE} por TCP.`);
+    }
+    poolSite = observarErrosDoPool(
+      new Pool({
+        connectionString: urlNoBanco(url.toString(), nomeBancoPrincipal),
+        connectionTimeoutMillis: 5000,
+      }),
+    );
+    poolsDeBanco.push(poolSite);
+  });
+
+  it('autentica como lumens_site', async () => {
+    const { rows } = await poolSite.query<{ session_user: string; current_user: string }>(
+      'SELECT session_user, current_user',
+    );
+
+    expect(rows[0]).toEqual({ session_user: PAPEL_SITE, current_user: PAPEL_SITE });
+  });
+
+  it.each(views)('lê %s', async (view) => {
+    await expect(poolSite.query(`SELECT * FROM "${view}"`)).resolves.toBeDefined();
+  });
+
+  it('recebe 42501 ao ler qualquer tabela do schema public', async () => {
+    const { rows: tabelas } = await poolOwner.query<{ tablename: string }>(
+      `SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`,
+    );
+    expect(tabelas.map((t) => t.tablename)).toContain('estudante');
+
+    for (const { tablename } of tabelas) {
+      await expect(
+        poolSite.query(`SELECT * FROM "${tablename}" LIMIT 1`),
+        tablename,
+      ).rejects.toMatchObject({ code: '42501' });
+    }
+  });
+
+  it('não alcança o schema do pg-boss nem o journal das migrações', async () => {
+    for (const tabela of ['pgboss.job', 'drizzle.__drizzle_migrations']) {
+      await expect(poolSite.query(`SELECT 1 FROM ${tabela} LIMIT 1`), tabela).rejects.toMatchObject(
+        { code: '42501' },
+      );
+    }
+  });
+});
+
 describe('separação das URLs no processo de migração', () => {
   it('exige DATABASE_URL_MIGRACAO sem aceitar DATABASE_URL como fallback', async () => {
     const falha = await capturarFalha(
@@ -377,7 +449,7 @@ describe('separação das URLs no processo de migração', () => {
         const { rows } = await pool.query<{ total: string }>(
           'SELECT count(*) AS total FROM drizzle.__drizzle_migrations',
         );
-        expect(rows[0]?.total).toBe('5');
+        expect(rows[0]?.total).toBe(await totalDeMigracoes());
       } finally {
         await pool.end();
       }
@@ -437,7 +509,7 @@ describe('upgrade histórico para a migração de privilégios', () => {
       const depoisJournal = await pool.query<{ total: string }>(
         'SELECT count(*) AS total FROM drizzle.__drizzle_migrations',
       );
-      expect(depoisJournal.rows[0]?.total).toBe('5');
+      expect(depoisJournal.rows[0]?.total).toBe(await totalDeMigracoes());
       expect(await buscarEvento(pool, sentinela.id)).toEqual(sentinela);
 
       const { rows: aplicacao } = await pool.query<{

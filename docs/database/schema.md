@@ -185,4 +185,6 @@ SQLSTATE e constraint, além da busca, metadados e consumo de tipos pelo domíni
 - Confirmar nomes reais dos blocos e base DIACOM antes do seed definitivo.
 - Domínio/agendador: expiração em dez minutos, máximo de tentativas, retenção de 24h,
   máximo de responsáveis ativos e transições. Os campos existem; as rotinas não estão nesta task.
-- Cifra e views públicas: fornecer as garantias de escrita e acesso aos campos protegidos.
+- T14 concluída: as views públicas e o login só de leitura `lumens_site` estão documentados no
+  [README de `@lumens/db`](../../packages/db/README.md#views-públicas-contrato-com-o-site).
+- Cifra: fornecer as garantias de escrita dos campos protegidos.

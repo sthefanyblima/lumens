@@ -281,7 +281,14 @@ export const eventos = pgTable(
     publico: boolean('publico').notNull().default(false),
     criadoEm: instante('criado_em').notNull().defaultNow(),
   },
-  (t) => [index('evento_pauta_criado_em_idx').on(t.pautaId, t.criadoEm)],
+  (t) => [
+    index('evento_pauta_criado_em_idx').on(t.pautaId, t.criadoEm),
+    // Feed de atividade do site (`v_atividade`), paginado por `ORDER BY criado_em DESC`. O
+    // NULLS FIRST é o padrão do DESC: com NULLS LAST o planejador não usa a ordem do índice.
+    index('evento_publico_criado_em_idx')
+      .on(t.criadoEm.desc().nullsFirst())
+      .where(sql`${t.publico}`),
+  ],
 );
 
 /** Passo da conversa do bot por telefone. A limpeza diária apaga as linhas com `expiraEm` vencido. */

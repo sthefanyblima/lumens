@@ -135,11 +135,14 @@ Ao atualizar um volume existente, não é preciso apagá-lo:
 
 1. Crie `.env.database` a partir do exemplo e mova para ele toda configuração administrativa:
    `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`,
-   `POSTGRES_APP_PASSWORD`, `DATABASE_URL_MIGRACAO` e `DATABASE_URL_TESTE`.
+   `POSTGRES_APP_PASSWORD`, `POSTGRES_SITE_PASSWORD`, `DATABASE_URL_MIGRACAO` e
+   `DATABASE_URL_TESTE`.
 2. Remova essas chaves administrativas do `.env`; o backend carrega esse arquivo.
-3. No `.env`, troque **tanto** `DATABASE_URL` quanto `DATABASE_URL_LEITURA` para o login
-   `lumens_app`, usando a mesma senha definida em `POSTGRES_APP_PASSWORD`.
-4. Rode `pnpm db:up` para provisionar o login e `pnpm db:migrate` para aplicar os privilégios.
+3. No `.env`, aponte `DATABASE_URL` para o login `lumens_app`, com a senha de
+   `POSTGRES_APP_PASSWORD`, e `DATABASE_URL_LEITURA` para o login só de leitura `lumens_site`,
+   com a senha de `POSTGRES_SITE_PASSWORD`.
+4. Rode `pnpm db:up` para provisionar os logins e `pnpm db:migrate` para aplicar as views e os
+   privilégios.
 
 Antes de iniciar o backend, confirme que o `.env` não contém mais usuário ou URL de owner/migrador.
 

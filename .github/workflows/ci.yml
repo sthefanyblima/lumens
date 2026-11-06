@@ -101,11 +101,12 @@ jobs:
         run: pnpm --filter @lumens/painel build
 
       # Mesma fonte usada pelo Docker local.
-      - name: Criar banco de teste e papel da aplicação
+      - name: Criar banco de teste e papéis da aplicação e do site
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         env:
           DATABASE_URL_MIGRACAO: postgresql://lumens:lumens_ci@localhost:5432/lumens
           POSTGRES_APP_PASSWORD: lumens_app_ci
+          POSTGRES_SITE_PASSWORD: lumens_site_ci
         run: |
           psql "$DATABASE_URL_MIGRACAO" -v ON_ERROR_STOP=1 -f docker/init/01-cria-banco-de-teste.sql
           pnpm db:provision
@@ -124,10 +125,11 @@ jobs:
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         env:
           DATABASE_URL: postgresql://lumens_app:lumens_app_ci@localhost:5432/lumens
-          DATABASE_URL_LEITURA: postgresql://lumens_app:lumens_app_ci@localhost:5432/lumens
+          DATABASE_URL_LEITURA: postgresql://lumens_site:lumens_site_ci@localhost:5432/lumens
           DATABASE_URL_MIGRACAO: postgresql://lumens:lumens_ci@localhost:5432/lumens
           DATABASE_URL_TESTE: postgresql://lumens:lumens_ci@localhost:5432/lumens_test
           POSTGRES_APP_PASSWORD: lumens_app_ci
+          POSTGRES_SITE_PASSWORD: lumens_site_ci
         run: pnpm test
 
       # Nenhum teste unitário pega o carregamento do .env: carregarEnv() recebe a fonte

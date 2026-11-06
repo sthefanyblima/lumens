@@ -236,6 +236,61 @@ describe('provisionamento seguro de papel da aplicação', () => {
     }
   });
 
+  it('provisiona o login do site com a senha própria, sem usar a da aplicação', async () => {
+    const nome = novoPapel();
+    const senhaSite = novaSenha('cli-site');
+    const senhaAplicacao = novaSenha('cli-app-ignorada');
+    const sucessos: string[] = [];
+    const falhas: string[] = [];
+    papeisCriados.add(nome);
+
+    const codigo = await executarProvisionamento({
+      ambiente: {
+        DATABASE_URL_MIGRACAO: urlAdministrativa,
+        POSTGRES_APP_PASSWORD: senhaAplicacao,
+        POSTGRES_SITE_PASSWORD: senhaSite,
+      },
+      papel: 'site',
+      nomePapel: nome,
+      escreverSucesso: (mensagem) => sucessos.push(mensagem),
+      escreverFalha: (mensagem) => falhas.push(mensagem),
+    });
+
+    expect(codigo).toBe(0);
+    expect(sucessos).toEqual(['Papel de leitura do site provisionado.']);
+    expect(falhas).toEqual([]);
+    expect(await estadoDoPapel(nome)).toMatchObject({
+      rolcanlogin: true,
+      rolsuper: false,
+      rolcreatedb: false,
+      rolcreaterole: false,
+      rolinherit: false,
+      rolreplication: false,
+      rolbypassrls: false,
+    });
+    expect(await autenticar(nome, senhaSite)).toEqual({ session_user: nome, current_user: nome });
+    await expect(autenticar(nome, senhaAplicacao)).rejects.toMatchObject({ code: '28P01' });
+  });
+
+  it('rejeita POSTGRES_SITE_PASSWORD ausente antes de criar o login do site', async () => {
+    const nome = novoPapel();
+    const falhas: string[] = [];
+
+    const codigo = await executarProvisionamento({
+      ambiente: { DATABASE_URL_MIGRACAO: urlAdministrativa, POSTGRES_APP_PASSWORD: 'x' },
+      papel: 'site',
+      nomePapel: nome,
+      escreverSucesso: () => undefined,
+      escreverFalha: (mensagem) => falhas.push(mensagem),
+    });
+
+    expect(codigo).toBe(1);
+    expect(falhas).toEqual([
+      'Falha ao provisionar o papel de leitura do site (código: CONFIG_SENHA_AUSENTE). Confira a conexão e os vínculos do papel.',
+    ]);
+    expect(await estadoDoPapel(nome)).toBeUndefined();
+  });
+
   it('recusa membership preexistente sem endurecer nem trocar a senha', async () => {
     const nome = novoPapel();
     const grupo = novoPapel();
